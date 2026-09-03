@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { renderJob } from './render.js';
 import { buildPdf } from './pdf.js';
 import { printPdf, listPrinters } from './print.js';
+import { runSync } from './sync.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..');
@@ -36,8 +37,8 @@ async function jfetch(url, init) {
   if (!res.ok) throw new Error(data.error || `HTTP ${res.status} ${url}`);
   return data;
 }
-
 let printersCache = [];
+let lastSyncAt = null;
 async function sayHello() {
   try {
     printersCache = await listPrinters();
@@ -47,7 +48,9 @@ async function sayHello() {
         agent: cfg.name,
         platform: process.platform,
         printers: printersCache,
-        version: '2.0.0',
+        version: '2.1.0',
+        lastSyncAt,
+        iikoConfigured: !!(cfg.iiko && cfg.iiko.host && cfg.iiko.login),
       }),
     });
   } catch (e) {
@@ -55,21 +58,26 @@ async function sayHello() {
   }
 }
 
-async function processJob(job) {
+async function getSettings() {
+  try {
+    return (await jfetch(API('/settings'))).settings || {};
+  } catch {
+    return {};
+  }
+}
+
+/* --------------------------------- печать --------------------------------- */
+
+async function processPrintJob(job) {
   const printer = cfg.printerName || job.render?.printerName || undefined;
   const dryRun = cfg.dryRun || !!job.render?.dryRun;
   console.log(`→ задание #${job.id} [${job.kind}] ${job.dish?.name || ''} ×${job.quantity || 1}`);
-
   try {
-    await jfetch(API(`/jobs/${job.id}/claim`), {
-      method: 'POST',
-      body: JSON.stringify({ agent: cfg.name }),
-    });
+    await jfetch(API(`/jobs/${job.id}/claim`), { method: 'POST', body: JSON.stringify({ agent: cfg.name }) });
   } catch (e) {
     console.log(`  пропуск: ${e.message}`);
     return;
   }
-
   let result;
   try {
     const png = await renderJob(job);
@@ -90,7 +98,6 @@ async function processJob(job) {
   } catch (e) {
     result = { ok: false, via: 'render', error: String(e?.message || e) };
   }
-
   try {
     await jfetch(API(`/jobs/${job.id}/complete`), {
       method: 'POST',
@@ -102,26 +109,86 @@ async function processJob(job) {
   console.log(`  ${result.ok ? '✓' : '✗'} ${result.via}${result.error ? ' — ' + result.error : ''}`);
 }
 
+/* ------------------------------ синхронизация ------------------------------ */
+
+let syncing = false;
+async function doSync(jobId, settings) {
+  if (syncing) return;
+  syncing = true;
+  try {
+    if (jobId) {
+      try {
+        await jfetch(API(`/jobs/${jobId}/claim`), { method: 'POST', body: JSON.stringify({ agent: cfg.name }) });
+      } catch (e) {
+        console.log(`  синхронизация: задание уже занято (${e.message})`);
+        return;
+      }
+    }
+    const s = settings || (await getSettings());
+    console.log('→ синхронизация с iiko…');
+    let ok = true;
+    let err = null;
+    const push = (p, init) => jfetch(API(p), init);
+    try {
+      const res = await runSync(cfg, push, s, (lvl, m) => console.log(`  [iiko] ${m}`));
+      lastSyncAt = new Date().toISOString();
+      console.log(`  ✓ синхронизация: ${JSON.stringify(res).slice(0, 220)}`);
+    } catch (e) {
+      ok = false;
+      err = String(e?.message || e);
+      console.warn('  ✗ синхронизация:', err);
+    }
+    if (jobId) {
+      await jfetch(API(`/jobs/${jobId}/complete`), {
+        method: 'POST',
+        body: JSON.stringify({ ok, via: 'iiko-sync', error: err }),
+      }).catch(() => {});
+    }
+  } finally {
+    syncing = false;
+  }
+}
+
+/* -------------------------------- главный цикл -------------------------------- */
+
 let working = false;
 async function tick() {
   if (working) return;
   working = true;
   try {
     const { jobs } = await jfetch(API('/jobs?status=queued'));
-    for (const job of jobs.sort((a, b) => a.id - b.id)) await processJob(job);
+    for (const job of jobs.sort((a, b) => a.id - b.id)) {
+      if (job.kind === 'sync') await doSync(job.id);
+      else await processPrintJob(job);
+    }
   } catch (e) {
-    process.stdout.write(`. `); // тихий ретрай при недоступности сети
+    process.stdout.write('. ');
   } finally {
     working = false;
+  }
+}
+
+let lastScheduledSync = 0;
+async function syncScheduler() {
+  const s = await getSettings();
+  if (s['sync.enabled'] === false) return;
+  if (!(cfg.iiko && cfg.iiko.host)) return;
+  const everyMs = Math.max(1, Number(s['sync.everyHours']) || 6) * 3600 * 1000;
+  if (Date.now() - lastScheduledSync >= everyMs) {
+    lastScheduledSync = Date.now();
+    await doSync(null, s);
   }
 }
 
 console.log(`\n  GOFOOD Print Agent  ·  ${cfg.name}`);
 console.log(`  API:      ${cfg.apiBase}`);
 console.log(`  Принтер:  ${cfg.printerName || '(из настроек сайта / по умолчанию)'}`);
+console.log(`  iiko:     ${cfg.iiko && cfg.iiko.host ? cfg.iiko.host : 'не настроен'}`);
 console.log(`  Опрос:    каждые ${cfg.pollMs} мс${cfg.dryRun ? '  ·  ТЕСТ-РЕЖИМ (без печати)' : ''}\n`);
 
 await sayHello();
 setInterval(sayHello, cfg.helloMs);
 setInterval(tick, cfg.pollMs);
+setInterval(syncScheduler, 60 * 1000); // раз в минуту проверяем, не пора ли синхронизировать
 tick();
+setTimeout(syncScheduler, 8000); // первая синхронизация через 8 c после старта

@@ -1,9 +1,15 @@
 {
-  "apiBase": "https://ВАШ-САЙТ.netlify.app",
-  "agentToken": "значение GOFOOD_AGENT_TOKEN из Netlify",
+  "apiBase": "https://gofood-stikers.netlify.app",
+  "agentToken": "значение GOFOOD_AGENT_TOKEN из Netlify → Environment variables",
   "pollMs": 2000,
   "helloMs": 15000,
   "printerName": "",
   "dryRun": false,
-  "name": "kitchen-pc"
+  "name": "monoblock-kitchen",
+
+  "iiko": {
+    "host": "greencity.iiko.it",
+    "login": "логин пользователя iiko API",
+    "password": "пароль пользователя iiko API"
+  }
 }

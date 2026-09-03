@@ -223,9 +223,14 @@ export default function SettingsTab() {
           <div>
             <label className="fld">Источник по умолчанию</label>
             <select value={s['barcode.defaultSource']} onChange={(e) => set('barcode.defaultSource', e.target.value)}>
+              <option value="ean13">EAN-13 из Артикула (как на кассе)</option>
               <option value="code">Код (из Excel)</option>
               <option value="artikul">Артикул (из Excel)</option>
             </select>
+            <p className="muted" style={{ fontSize: 12 }}>
+              EAN-13 вычисляется по формуле <span className="mono">21 + Артикул + 00001 + к.ц.</span> и
+              совпадает со штрихкодом в кассе/iiko (проверено на 464 позициях).
+            </p>
           </div>
           <div>
             <label className="fld">Символика</label>

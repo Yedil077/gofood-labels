@@ -42,9 +42,23 @@ export const api = {
     req('/print/test', { method: 'POST', body: JSON.stringify({ copies }) }),
 
   agentInfo: () =>
-    req<{ agent: { agent: string; platform: string; printers: string[]; at: string } | null; online: boolean }>(
-      '/agent/info'
-    ),
+    req<{
+      agent:
+        | {
+            agent: string;
+            platform: string;
+            printers: string[];
+            at: string;
+            lastSyncAt?: string | null;
+            iikoConfigured?: boolean;
+          }
+        | null;
+      online: boolean;
+    }>('/agent/info'),
+
+  syncStatus: () =>
+    req<{ enabled: boolean; everyHours: number; lastRunAt: string | null; lastResult: any }>('/sync/status'),
+  syncRun: () => req<{ ok: boolean; jobId: number }>('/sync/run', { method: 'POST', body: '{}' }),
 
   history: (limit = 200) => req<{ jobs: PrintJob[] }>(`/history?limit=${limit}`),
   logs: () => req<{ logs: LogRow[] }>('/logs'),

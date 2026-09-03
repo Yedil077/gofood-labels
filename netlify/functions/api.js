@@ -76,6 +76,21 @@ function toNum(v) {
   return v === '' || v == null ? null : Number(v);
 }
 
+function num1(v) {
+  if (v == null || v === '') return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? Math.round(n * 10) / 10 : null;
+}
+
+function normName(s) {
+  return String(s || '')
+    .toLowerCase()
+    .replace(/[«»"'`]/g, '')
+    .replace(/[\s\-–—]+/g, ' ')
+    .replace(/[.,;:()]+/g, '')
+    .trim();
+}
+
 /* ----------------------------- маршрутизация ----------------------------- */
 
 export default async function handler(req) {
@@ -342,6 +357,129 @@ export default async function handler(req) {
       });
       await logEvent('info', 'print', `Тестовая печать, задание #${job.id}`);
       return json({ ok: true, jobId: job.id, status: job.status });
+    }
+
+    /* --- синхронизация с iiko --- */
+    if (seg[0] === 'sync') {
+      if (seg[1] === 'status' && method === 'GET') {
+        const s = await loadSettings();
+        return json({
+          enabled: s['sync.enabled'] !== false,
+          everyHours: Number(s['sync.everyHours']) || 6,
+          lastRunAt: s['sync.lastRunAt'] || null,
+          lastResult: s['sync.lastResult'] || null,
+        });
+      }
+      if (seg[1] === 'run' && method === 'POST') {
+        if (!isAdmin(req)) return denyAdmin;
+        const job = await enqueueJob({ kind: 'sync', user: body.user || 'admin', dish: { name: '[СИНХРОНИЗАЦИЯ iiko]' } });
+        await logEvent('info', 'sync', `Запрошена синхронизация, задание #${job.id}`);
+        return json({ ok: true, jobId: job.id });
+      }
+      // агент присылает вычисленные состав + КБЖУ
+      if (seg[1] === 'nomenclature' && method === 'POST') {
+        if (!isAgent(req)) return denyAgent;
+        const items = Array.isArray(body.items) ? body.items : [];
+        const s0 = (await getJSON('settings', {})) || {};
+        const settings = mergeSettings(s0);
+        const allowNew = settings['sync.allowNewDishes'] === true;
+        const dishes = await loadDishes();
+        const byArt = new Map(dishes.filter((d) => d.artikul).map((d) => [String(d.artikul), d]));
+        const byCode = new Map(dishes.filter((d) => d.code).map((d) => [String(d.code), d]));
+        const byName = new Map(dishes.map((d) => [normName(d.name), d]));
+        let nextId = dishes.reduce((m, d) => Math.max(m, d.id || 0), 0) + 1;
+        const now = new Date().toISOString();
+
+        let matched = 0;
+        let compSet = 0;
+        let nutrSet = 0;
+        let nutrPartial = 0;
+        let added = 0;
+
+        for (const it of items) {
+          const key = String(it.num || '').trim();
+          let d =
+            (key && byArt.get(key)) ||
+            (it.code && byCode.get(String(it.code))) ||
+            (it.name && byName.get(normName(it.name))) ||
+            null;
+
+          if (!d) {
+            if (!allowNew || !it.name) continue;
+            d = {
+              id: nextId++,
+              name: it.name,
+              artikul: key || null,
+              code: it.code ? String(it.code) : null,
+              type: 'Блюдо',
+              category: null,
+              category_source: 'none',
+              composition: null,
+              composition_source: null,
+              kcal: null,
+              protein: null,
+              fat: null,
+              carbs: null,
+              nutrition_source: null,
+              barcode_source: null,
+              active: 1,
+              created_at: now,
+              updated_at: now,
+            };
+            dishes.push(d);
+            if (d.artikul) byArt.set(String(d.artikul), d);
+            added++;
+          }
+          matched++;
+          d.iiko_id = it.iikoId || d.iiko_id || null;
+          d.iiko_synced_at = now;
+
+          if (it.composition && d.composition_source !== 'manual') {
+            if (d.composition !== it.composition) {
+              d.composition = it.composition;
+              d.composition_source = 'iiko';
+              compSet++;
+            }
+          }
+
+          const hasFull =
+            it.protein != null && it.fat != null && it.carbs != null && it.kcal != null;
+          const hasAny = it.protein != null || it.fat != null || it.carbs != null || it.kcal != null;
+          if (hasAny && d.nutrition_source !== 'manual') {
+            d.protein = num1(it.protein);
+            d.fat = num1(it.fat);
+            d.carbs = num1(it.carbs);
+            d.kcal = it.kcal == null ? null : Math.round(Number(it.kcal));
+            d.nutrition_source = hasFull ? 'iiko-computed' : 'iiko-partial';
+            if (hasFull) nutrSet++;
+            else nutrPartial++;
+          }
+          d.updated_at = now;
+        }
+
+        await setJSON('dishes', dishes);
+        const result = {
+          ok: true,
+          at: now,
+          received: items.length,
+          matched,
+          added,
+          compositionSet: compSet,
+          nutritionSet: nutrSet,
+          nutritionPartial: nutrPartial,
+          message: body.message || null,
+          agentStats: body.stats || null,
+        };
+        s0['sync.lastRunAt'] = now;
+        s0['sync.lastResult'] = result;
+        await setJSON('settings', s0);
+        await logEvent(
+          'info',
+          'sync',
+          `iiko: получено ${items.length}, сопоставлено ${matched}, состав +${compSet}, КБЖУ +${nutrSet} (частично ${nutrPartial}), новых ${added}`
+        );
+        return json(result);
+      }
     }
 
     /* --- history --- */

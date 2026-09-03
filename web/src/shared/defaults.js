@@ -17,9 +17,19 @@ export const DEFAULTS = {
   'label.safeMm': 3,
 
   // Штрихкод
-  'barcode.defaultSource': 'code', // 'code' | 'artikul'
-  'barcode.symbology': 'code128',
+  'barcode.defaultSource': 'ean13', // 'ean13' (из Артикула) | 'code' | 'artikul'
+  'barcode.symbology': 'code128', // для источников code/artikul
   'barcode.showText': true,
+
+  // Синхронизация с iiko (выполняет Print Agent на моноблоке)
+  'sync.enabled': true,
+  'sync.everyHours': 6,
+  'sync.compositionBasis': 'names', // только названия ингредиентов
+  'sync.nutritionBasis': 'portion', // 'portion' | 'per100g'
+  'sync.allowNewDishes': false, // добавлять блюда, которых нет в импорте Excel
+  'sync.excludeIngredients': ['соль', 'вода', 'перец', 'масло растительное', 'масло для жарки'],
+  'sync.lastRunAt': null,
+  'sync.lastResult': null, // { ok, matched, compositionSet, nutritionSet, nutritionPartial, message }
 
   // Бренд / тексты
   'brand.name': 'gofood',

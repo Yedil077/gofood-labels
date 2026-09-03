@@ -1,4 +1,5 @@
 /** Общая логика: источник штрихкода, предупреждения, нормализация блюда для этикетки. */
+import { ean13FromArtikul } from './barcode.js';
 
 export const WARNING_TEXT = {
   composition: 'Не заполнен состав',
@@ -8,9 +9,16 @@ export const WARNING_TEXT = {
 };
 
 export function pickBarcodeValue(dish, settings) {
-  const src = dish.barcode_source || settings['barcode.defaultSource'] || 'code';
+  const src = dish.barcode_source || settings['barcode.defaultSource'] || 'ean13';
+  if (src === 'ean13') {
+    const v = ean13FromArtikul(dish.artikul);
+    if (v) return { source: 'ean13', value: v, symbology: 'ean13' };
+    // 6-значный артикул или нет артикула — откат на Код
+    const c = dish.code ? String(dish.code).trim() : '';
+    return { source: 'code', value: c, symbology: 'code128' };
+  }
   const val = src === 'artikul' ? dish.artikul : dish.code;
-  return { source: src, value: val ? String(val).trim() : '' };
+  return { source: src, value: val ? String(val).trim() : '', symbology: 'code128' };
 }
 
 export function warningsForDish(dish, settings) {
@@ -48,7 +56,7 @@ export function normalizeDishForLabel(dish, settings, dt) {
     composition: dish.composition || '',
     barcodeValue: bc.value,
     barcodeSource: bc.source,
-    symbology: settings['barcode.symbology'] || 'code128',
+    symbology: bc.symbology || settings['barcode.symbology'] || 'code128',
     showBarcodeText: settings['barcode.showText'] !== false,
     storageText: dish.storage_text || settings['storage.text'] || '',
     dateStr: dt?.date || '',

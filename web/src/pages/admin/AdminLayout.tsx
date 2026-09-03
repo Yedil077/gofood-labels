@@ -4,11 +4,13 @@ import DishesTab from './DishesTab';
 import SettingsTab from './SettingsTab';
 import HistoryTab from './HistoryTab';
 import ErrorsTab from './ErrorsTab';
+import SyncTab from './SyncTab';
 import { getToken } from '../../config';
 
 const TABS = [
   { to: 'settings', label: 'Настройки и печать' },
   { to: 'import', label: 'Импорт Excel' },
+  { to: 'sync', label: 'Синхронизация iiko' },
   { to: 'dishes', label: 'Блюда' },
   { to: 'history', label: 'История печати' },
   { to: 'errors', label: 'Логи ошибок' },
@@ -36,6 +38,7 @@ export default function AdminLayout() {
         <Route index element={<Navigate to="settings" replace />} />
         <Route path="settings" element={<SettingsTab />} />
         <Route path="import" element={<ImportTab />} />
+        <Route path="sync" element={<SyncTab />} />
         <Route path="dishes" element={<DishesTab />} />
         <Route path="history" element={<HistoryTab />} />
         <Route path="errors" element={<ErrorsTab />} />
