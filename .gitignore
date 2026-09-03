@@ -1,0 +1,13 @@
+node_modules/
+web/dist/
+.netlify/
+*.log
+
+# Print Agent (локальный)
+print-agent/agent-config.json
+print-agent/out/
+print-agent/fonts/*.ttf
+print-agent/fonts/*.otf
+
+.DS_Store
+_preview/

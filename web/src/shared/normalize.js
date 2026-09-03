@@ -1,0 +1,64 @@
+/** Общая логика: источник штрихкода, предупреждения, нормализация блюда для этикетки. */
+
+export const WARNING_TEXT = {
+  composition: 'Не заполнен состав',
+  kbju: 'Не заполнено КБЖУ',
+  category: 'Не указана категория',
+  barcode: 'Отсутствует штрихкод (Код / Артикул)',
+};
+
+export function pickBarcodeValue(dish, settings) {
+  const src = dish.barcode_source || settings['barcode.defaultSource'] || 'code';
+  const val = src === 'artikul' ? dish.artikul : dish.code;
+  return { source: src, value: val ? String(val).trim() : '' };
+}
+
+export function warningsForDish(dish, settings) {
+  const w = [];
+  if (!dish.composition || !String(dish.composition).trim()) w.push('composition');
+  const hasKbju =
+    dish.kcal != null || dish.protein != null || dish.fat != null || dish.carbs != null;
+  if (!hasKbju) w.push('kbju');
+  if (!dish.category || !String(dish.category).trim()) w.push('category');
+  if (!pickBarcodeValue(dish, settings).value) w.push('barcode');
+  return w;
+}
+
+export function warningObjects(dish, settings) {
+  return warningsForDish(dish, settings).map((code) => ({ code, text: WARNING_TEXT[code] }));
+}
+
+/**
+ * Готовит плоский объект для отрисовки этикетки (одинаково в браузере и в агенте).
+ * @param {object} dish     запись блюда
+ * @param {object} settings  слитые настройки
+ * @param {{date:string,time:string,approximate?:boolean}} dt
+ */
+export function normalizeDishForLabel(dish, settings, dt) {
+  const bc = pickBarcodeValue(dish, settings);
+  return {
+    name: dish.name || '',
+    category: dish.category || '',
+    kbju: {
+      protein: dish.protein ?? null,
+      fat: dish.fat ?? null,
+      carbs: dish.carbs ?? null,
+      kcal: dish.kcal ?? null,
+    },
+    composition: dish.composition || '',
+    barcodeValue: bc.value,
+    barcodeSource: bc.source,
+    symbology: settings['barcode.symbology'] || 'code128',
+    showBarcodeText: settings['barcode.showText'] !== false,
+    storageText: dish.storage_text || settings['storage.text'] || '',
+    dateStr: dt?.date || '',
+    timeStr: dt?.time || '',
+    approximateTime: !!dt?.approximate,
+    brand: {
+      name: settings['brand.name'] || 'gofood',
+      color: settings['brand.primaryColor'] || '#F2661F',
+      tagline: settings['brand.tagline'] || '',
+    },
+    fontScale: Number(settings['brand.fontScale']) || 1,
+  };
+}

@@ -1,0 +1,9 @@
+{
+  "apiBase": "https://ВАШ-САЙТ.netlify.app",
+  "agentToken": "значение GOFOOD_AGENT_TOKEN из Netlify",
+  "pollMs": 2000,
+  "helloMs": 15000,
+  "printerName": "",
+  "dryRun": false,
+  "name": "kitchen-pc"
+}

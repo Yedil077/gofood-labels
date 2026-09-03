@@ -1,0 +1,18 @@
+{
+  "name": "gofood-print-agent",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "gofood-agent": "src/index.js"
+  },
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "dependencies": {
+    "@napi-rs/canvas": "^0.1.65",
+    "bwip-js": "^4.5.1",
+    "pdf-to-printer": "^5.6.0",
+    "pdfkit": "^0.15.1"
+  }
+}
