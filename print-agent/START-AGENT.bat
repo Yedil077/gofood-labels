@@ -4,20 +4,25 @@ cd /d "%~dp0"
 title GOFOOD Print Agent
 
 if not exist "agent-config.json" (
-  echo Нет agent-config.json. Копирую из примера...
-  copy "agent-config.example.json" "agent-config.json" >nul
+  if exist "agent-config.example.json" copy /y "agent-config.example.json" "agent-config.json" >nul
   echo.
-  echo ОТКРОЙТЕ agent-config.json и укажите apiBase и agentToken, затем запустите снова.
+  echo Fill agent-config.json (apiBase, agentToken, iiko), then run again.
   notepad "agent-config.json"
   pause
   exit /b
 )
 
 if not exist "node_modules" (
-  echo Установка зависимостей агента (нужен интернет один раз)...
-  call npm install --no-audit --no-fund || (echo ОШИБКА установки & pause & exit /b)
+  echo Installing dependencies (needs internet, ~1 min)...
+  call npm install --no-audit --no-fund
+  if errorlevel 1 (
+    echo.
+    echo npm install failed. Is Node.js 18+ installed?
+    pause
+    exit /b
+  )
 )
 
-echo Запуск агента. Не закрывайте это окно во время работы кухни.
+echo Starting GOFOOD Print Agent. Keep this window open.
 node src\index.js
 pause
