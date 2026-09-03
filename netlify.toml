@@ -1,4 +1,4 @@
-# Netlify: статический React + функции (API) + Blobs (данные)
+# Netlify: статический React (web/dist) + функция-роутер /api/* + Blobs (данные)
 
 [build]
   base = "."
@@ -12,21 +12,10 @@
 [functions]
   node_bundler = "esbuild"
 
-# /api/* -> одна функция-роутер
-[[redirects]]
-  from = "/api/*"
-  to = "/.netlify/functions/api/:splat"
-  status = 200
-  force = true
-
-# SPA fallback
-[[redirects]]
-  from = "/*"
-  to = "/index.html"
-  status = 200
+# /api/* обслуживает функция netlify/functions/api.js (в ней `export const config = { path: "/api/*" }`).
+# SPA-фолбэк (/* -> /index.html) лежит в web/public/_redirects, чтобы не мешать `netlify dev`.
 
 [dev]
   command = "npm --prefix web run dev"
   targetPort = 5180
   port = 8888
-  publish = "web/dist"

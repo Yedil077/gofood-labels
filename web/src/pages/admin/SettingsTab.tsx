@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../../api';
 import { renderTest } from '../../label/renderBrowser';
-import { getToken, setToken, getApiBaseRaw, setApiBase } from '../../config';
+import { getToken, setToken } from '../../config';
 import type { Settings } from '../../types';
 
 const minToHHMM = (m: number) =>
@@ -19,7 +19,6 @@ export default function SettingsTab() {
   const [ceText, setCeText] = useState('');
   const [ceErr, setCeErr] = useState('');
   const [tok, setTok] = useState(getToken());
-  const [base, setBase] = useState(getApiBaseRaw());
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -106,40 +105,35 @@ export default function SettingsTab() {
 
   return (
     <div>
-      {/* --- Подключение --- */}
+      {/* --- Доступ администратора --- */}
       <div className="card">
-        <h2>Подключение</h2>
-        <div className="split2">
-          <div>
-            <label className="fld">Токен администратора</label>
-            <input
-              type="text"
-              value={tok}
-              placeholder="значение GOFOOD_TOKEN из Netlify"
-              onChange={(e) => {
-                setTok(e.target.value);
-                setToken(e.target.value);
-              }}
-            />
-            <p className="muted" style={{ fontSize: 12 }}>
-              Нужен для сохранения настроек, импорта и правки блюд. Хранится только в этом браузере.
-            </p>
-          </div>
-          <div>
-            <label className="fld">API-адрес (необязательно)</label>
-            <input
-              type="text"
-              value={base}
-              placeholder="пусто = этот сайт. Для локального агента: http://192.168.0.50:5199"
-              onChange={(e) => setBase(e.target.value)}
-              onBlur={() => {
-                setApiBase(base);
-                location.reload();
-              }}
-            />
-          </div>
-        </div>
-        <div className="banner" style={{ background: agent?.online ? '#eef8f0' : '#fdeeee', border: '1px solid ' + (agent?.online ? '#bfe3c6' : '#f0c4c4') }}>
+        <h2>Доступ администратора</h2>
+        <p className="muted" style={{ marginTop: 0 }}>
+          Пароль нужен <b>только на этой странице</b> — импорт Excel, правка блюд, настройки, тестовая
+          печать. <b>Работникам кухни вводить ничего не нужно</b> — экран «Печать» работает сам.
+        </p>
+        <label className="fld">Пароль администратора</label>
+        <input
+          type="password"
+          value={tok}
+          placeholder="значение GOFOOD_TOKEN из Netlify → Environment variables"
+          style={{ maxWidth: 420 }}
+          onChange={(e) => {
+            setTok(e.target.value);
+            setToken(e.target.value);
+          }}
+        />
+        <p className="muted" style={{ fontSize: 12 }}>
+          Сохраняется только в этом браузере. Если в Netlify переменная не задана — пароль не нужен.
+        </p>
+        <div
+          className="banner"
+          style={{
+            marginTop: 12,
+            background: agent?.online ? '#eef8f0' : '#fdeeee',
+            border: '1px solid ' + (agent?.online ? '#bfe3c6' : '#f0c4c4'),
+          }}
+        >
           Print Agent: {agent?.online ? '🟢 на связи' : '🔴 не отвечает'}
           {agent?.agent && (
             <>

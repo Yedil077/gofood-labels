@@ -9,22 +9,29 @@ import { api } from '../api';
 import { calculateLabelDateTime, localKey } from '../shared/labelDateTime.js';
 // @ts-ignore
 import { normalizeDishForLabel } from '../shared/normalize.js';
+// @ts-ignore
+import { groupOf, buildTree } from '../shared/categories.js';
 import type { Dish, Settings } from '../types';
+
+type View = 'groups' | 'dishes' | 'dish';
 
 export default function PrintPage() {
   const [settings, setSettings] = useState<Settings | null>(null);
+  const [dishes, setDishes] = useState<Dish[]>([]);
+  const [view, setView] = useState<View>('groups');
+  const [selGroup, setSelGroup] = useState('');
+  const [selSub, setSelSub] = useState('');
   const [dish, setDish] = useState<Dish | null>(null);
   const [qty, setQty] = useState(1);
   const [now, setNow] = useState(new Date());
   const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState<
-    null | { kind: 'ok' | 'err' | 'wait'; text: string; note?: string }
-  >(null);
+  const [result, setResult] = useState<null | { kind: 'ok' | 'err' | 'wait'; text: string; note?: string }>(null);
   const [confirm, setConfirm] = useState<null | { warnings: { code: string; text: string }[] }>(null);
   const pollRef = useRef<number | null>(null);
 
   useEffect(() => {
-    api.getSettings().then((r) => setSettings(r.settings));
+    api.getSettings().then((r) => setSettings(r.settings)).catch(() => {});
+    api.listDishes('', false).then((r) => setDishes(r.dishes)).catch(() => {});
   }, []);
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 30000);
@@ -33,10 +40,7 @@ export default function PrintPage() {
   useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current); }, []);
 
   const dtCfg = settings?.datetime;
-  const dt = useMemo(
-    () => (dtCfg ? calculateLabelDateTime(localKey(now), dtCfg) : null),
-    [dtCfg, now]
-  );
+  const dt = useMemo(() => (dtCfg ? calculateLabelDateTime(localKey(now), dtCfg) : null), [dtCfg, now]);
 
   const rp = useMemo(
     () => ({
@@ -50,16 +54,38 @@ export default function PrintPage() {
     [settings]
   );
 
+  const tree = useMemo(() => buildTree(dishes), [dishes]);
+  const currentSubs = useMemo(
+    () => tree.find((g: any) => g.group === selGroup)?.subs ?? [],
+    [tree, selGroup]
+  );
+  const dishesInView = useMemo(() => {
+    let list = dishes.filter((d) => groupOf(d.category).group === selGroup);
+    if (selSub) list = list.filter((d) => groupOf(d.category).sub === selSub);
+    return list.sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+  }, [dishes, selGroup, selSub]);
+
   const labelData = useMemo(() => {
-    if (!settings || !dt) return null;
-    const src = dish || {
-      name: 'Название блюда',
-      category: 'Категория',
-      code: '0000',
-      artikul: '00000',
-    };
-    return normalizeDishForLabel(src, settings, dt);
+    if (!settings || !dt || !dish) return null;
+    return normalizeDishForLabel(dish, settings, dt);
   }, [dish, settings, dt]);
+
+  function openGroup(g: string) {
+    setSelGroup(g);
+    setSelSub('');
+    setView('dishes');
+  }
+  function openDish(d: Dish) {
+    setDish(d);
+    setQty(1);
+    setResult(null);
+    setView('dish');
+  }
+  function backToGroups() {
+    setView('groups');
+    setDish(null);
+    setResult(null);
+  }
 
   async function doPrint(ignoreWarnings = false) {
     if (!dish) return;
@@ -81,10 +107,8 @@ export default function PrintPage() {
         setConfirm(null);
         setResult({
           kind: 'wait',
-          text: `Задание #${r.jobId} создано (${qty} шт., ${r.labelDate} ${r.labelTime}). Ожидание агента печати…`,
-          note: r.approximateTime
-            ? 'Время рассчитано приблизительно — уточните формулу в Настройках → Дата/время.'
-            : undefined,
+          text: `Задание создано (${qty} шт., ${r.labelDate} ${r.labelTime}). Печатается…`,
+          note: r.approximateTime ? 'Время рассчитано приблизительно.' : undefined,
         });
         watchJob(r.jobId);
       } else {
@@ -108,16 +132,17 @@ export default function PrintPage() {
         if (j && ['success', 'error', 'dry-run'].includes(j.status)) {
           clearInterval(pollRef.current!);
           pollRef.current = null;
-          if (j.status === 'error')
-            setResult({ kind: 'err', text: `Задание #${jobId}: ошибка печати — ${j.error || 'см. логи'}` });
-          else
-            setResult({
-              kind: 'ok',
-              text:
-                j.status === 'dry-run'
-                  ? `Задание #${jobId}: агент в тест-режиме (PDF сохранён, не напечатано).`
-                  : `Задание #${jobId}: напечатано ✓ (${j.via || 'принтер'}).`,
-            });
+          setResult(
+            j.status === 'error'
+              ? { kind: 'err', text: `Ошибка печати: ${j.error || 'см. логи'}` }
+              : {
+                  kind: 'ok',
+                  text:
+                    j.status === 'dry-run'
+                      ? 'Агент в тест-режиме — PDF сохранён, не напечатано.'
+                      : 'Напечатано ✓',
+                }
+          );
         }
       } catch {
         /* keep polling */
@@ -127,80 +152,140 @@ export default function PrintPage() {
         pollRef.current = null;
         setResult((cur) =>
           cur?.kind === 'wait'
-            ? {
-                kind: 'err',
-                text: `Задание #${jobId} создано, но агент печати не ответил. Проверьте, что Print Agent запущен на ПК с принтером.`,
-              }
+            ? { kind: 'err', text: 'Агент печати не ответил. Проверьте, что Print Agent запущен на ПК с принтером.' }
             : cur
         );
       }
     }, 2000);
   }
 
+  /* ------------------------------- РЕНДЕР ------------------------------- */
+
   return (
     <div>
-      <h1>Печать этикеток</h1>
-      <p className="muted" style={{ marginTop: 0 }}>
-        Найдите блюдо → проверьте превью → количество → «Печать».
-      </p>
+      <div className="row" style={{ justifyContent: 'space-between', alignItems: 'baseline' }}>
+        <h1 style={{ marginBottom: 4 }}>Печать этикеток</h1>
+        {dt && (
+          <span className={'tag ' + (dt.approximate ? 'warn' : 'ok')}>
+            на этикетке: {dt.date} {dt.time}
+          </span>
+        )}
+      </div>
 
-      {dt && (
-        <div className={'banner ' + (dt.approximate ? 'warn' : 'ok')} style={{ maxWidth: 640 }}>
-          Дата/время на этикетке: <b>{dt.date} {dt.time}</b>
-          {dt.approximate ? ' — приблизительно (формулу времени уточните в админке).' : ' — по контрольному правилу.'}
-        </div>
+      {/* Поиск доступен всегда */}
+      <div className="card" style={{ marginBottom: 16 }}>
+        <DishSearch
+          onPick={(d) => {
+            const g = groupOf(d.category);
+            setSelGroup(g.group);
+            setSelSub('');
+            openDish(d);
+          }}
+        />
+      </div>
+
+      {view === 'groups' && (
+        <>
+          {!dishes.length ? (
+            <div className="card muted">
+              Список блюд пуст. Импортируйте Excel в разделе{' '}
+              <Link to="/admin/import">Администратор → Импорт</Link>.
+            </div>
+          ) : (
+            <div className="pick-grid">
+              {tree.map((g: any) => (
+                <button key={g.group} className="pick-tile" onClick={() => openGroup(g.group)}>
+                  <span className="pick-ic">{g.icon}</span>
+                  <span className="pick-name">{g.group}</span>
+                  <span className="pick-count">{g.count}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </>
       )}
 
-      <div className="grid-print">
-        <div className="card">
-          <label className="fld">Поиск блюда</label>
-          <DishSearch onPick={(d) => { setDish(d); setResult(null); }} />
+      {view === 'dishes' && (
+        <>
+          <div className="row" style={{ marginBottom: 12, gap: 10 }}>
+            <button className="btn" onClick={backToGroups}>← Категории</button>
+            <h2 style={{ margin: 0 }}>{selGroup}</h2>
+          </div>
 
-          {dish && (
-            <div style={{ marginTop: 18 }}>
-              <div style={{ fontWeight: 800, fontSize: 17 }}>{dish.name}</div>
-              <div className="muted" style={{ fontSize: 13 }}>
-                Категория: {dish.category || '— не указана'} · Код: {dish.code || '—'} · Артикул: {dish.artikul || '—'} ·
-                Штрихкод ({dish.barcodeSourceEffective}): {dish.barcodeValue || '—'}
-              </div>
-
-              <div style={{ marginTop: 14 }}>
-                <WarningsPanel warnings={dish.warnings} />
-              </div>
-
-              <label className="fld">Количество этикеток (1–999)</label>
-              <QuantityStepper value={qty} onChange={setQty} />
-
-              <div style={{ marginTop: 18 }}>
-                <button className="btn primary big" disabled={busy} onClick={() => doPrint(false)}>
-                  {busy ? <span className="spinner" /> : '🖨'} Печать {qty > 1 ? `${qty} этикеток` : 'этикетки'}
-                </button>
-              </div>
-
-              {result && (
-                <div
-                  className={
-                    'banner ' + (result.kind === 'ok' ? 'ok' : result.kind === 'err' ? 'err' : 'warn')
-                  }
-                  style={{ marginTop: 12 }}
+          {currentSubs.length > 0 && (
+            <div className="chips" style={{ marginBottom: 14 }}>
+              <button
+                className={'chip' + (selSub === '' ? ' active' : '')}
+                onClick={() => setSelSub('')}
+              >
+                Все
+              </button>
+              {currentSubs.map((s: any) => (
+                <button
+                  key={s.sub}
+                  className={'chip' + (selSub === s.sub ? ' active' : '')}
+                  onClick={() => setSelSub(s.sub)}
                 >
-                  {result.text}
-                  {result.note && <div style={{ marginTop: 6, fontSize: 12 }}>{result.note}</div>}
-                </div>
-              )}
+                  {s.sub} <span className="muted">{s.count}</span>
+                </button>
+              ))}
             </div>
           )}
 
-          {!dish && (
-            <p className="muted" style={{ marginTop: 20 }}>
-              Начните вводить название, код или артикул. Список пуст? Импортируйте Excel в разделе{' '}
-              <Link to="/admin/import">Администратор → Импорт</Link>.
-            </p>
-          )}
-        </div>
+          <div className="dish-grid">
+            {dishesInView.map((d) => (
+              <button key={d.id} className="dish-tile" onClick={() => openDish(d)}>
+                <span className="dish-name">{d.name}</span>
+                <span className="dish-meta">
+                  Код {d.code || '—'}
+                  {d.warnings.length ? ` · ⚠️ ${d.warnings.length}` : ''}
+                </span>
+              </button>
+            ))}
+            {!dishesInView.length && <div className="muted">В этой категории нет блюд.</div>}
+          </div>
+        </>
+      )}
 
-        {labelData && <LabelPreview data={labelData} rp={rp} />}
-      </div>
+      {view === 'dish' && dish && (
+        <div className="grid-print">
+          <div className="card">
+            <button className="btn" onClick={() => (selGroup ? setView('dishes') : backToGroups())}>
+              ← Назад
+            </button>
+
+            <div style={{ marginTop: 14, fontWeight: 800, fontSize: 20 }}>{dish.name}</div>
+            <div className="muted" style={{ fontSize: 13 }}>
+              {dish.category || 'без категории'} · Код {dish.code || '—'}
+            </div>
+
+            <div style={{ marginTop: 14 }}>
+              <WarningsPanel warnings={dish.warnings} />
+            </div>
+
+            <label className="fld">Количество</label>
+            <QuantityStepper value={qty} onChange={setQty} />
+
+            <div style={{ marginTop: 18 }}>
+              <button className="btn primary big" disabled={busy} onClick={() => doPrint(false)}>
+                {busy ? <span className="spinner" /> : '🖨'} ПЕЧАТЬ{qty > 1 ? ` · ${qty} шт.` : ''}
+              </button>
+            </div>
+
+            {result && (
+              <div
+                className={'banner ' + (result.kind === 'ok' ? 'ok' : result.kind === 'err' ? 'err' : 'warn')}
+                style={{ marginTop: 12 }}
+              >
+                {result.text}
+                {result.note && <div style={{ marginTop: 6, fontSize: 12 }}>{result.note}</div>}
+              </div>
+            )}
+          </div>
+
+          {labelData && <LabelPreview data={labelData} rp={rp} />}
+        </div>
+      )}
 
       {confirm && (
         <div className="modal-bg" onClick={() => setConfirm(null)}>
@@ -215,12 +300,8 @@ export default function PrintPage() {
               ))}
             </div>
             <div className="row wrap" style={{ justifyContent: 'flex-end' }}>
-              <Link className="btn" to={`/admin/dishes?edit=${dish?.id}`}>
-                Заполнить в админке
-              </Link>
-              <button className="btn" onClick={() => setConfirm(null)}>
-                Отмена
-              </button>
+              <Link className="btn" to={`/admin/dishes?edit=${dish?.id}`}>Заполнить в админке</Link>
+              <button className="btn" onClick={() => setConfirm(null)}>Отмена</button>
               <button className="btn primary" disabled={busy} onClick={() => doPrint(true)}>
                 Печатать всё равно
               </button>
