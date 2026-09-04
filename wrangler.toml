@@ -7,7 +7,7 @@ compatibility_flags = ["nodejs_compat"]
 [[d1_databases]]
 binding = "GOFOOD_DB"
 database_name = "gofood"
-database_id = "PASTE_DATABASE_ID_HERE"
+database_id = "5e9adf48-3c57-4415-8c15-2db58a8454a9"
 
 # Секреты GOFOOD_TOKEN / GOFOOD_AGENT_TOKEN задаются в Cloudflare Pages →
 # Settings → Environment variables (или `wrangler pages secret put`), НЕ здесь.
