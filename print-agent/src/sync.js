@@ -56,7 +56,19 @@ export async function runSync(cfg, pushToCloud, settings, log = () => {}) {
     }
     log('info', `iiko: с пищевой ценностью на 100 г — ${withNutr}`);
     if (products.length && withNutr === 0) {
-      log('warn', 'iiko: ни у одной позиции не считались поля ценности — пришлите один объект products в поддержку, подстрою имена полей');
+      // ищем позицию, где вообще есть похожие на ценность поля
+      const rx = /protein|fat|carb|energy|calor|nutri|бел|жир|угл|ккал|энерг/i;
+      let sample = products.find((p) => Object.keys(p || {}).some((k) => rx.test(k)));
+      const keysOf = (p) => Object.keys(p || {}).filter((k) => rx.test(k));
+      if (sample) {
+        const picked = {};
+        for (const k of keysOf(sample)) picked[k] = sample[k];
+        log('warn', `iiko: КБЖУ-поля есть, но с другими именами. Пример: ${JSON.stringify(picked)}`);
+      } else {
+        // ни одного похожего поля — покажем полный набор ключей первого товара
+        const goods = products.find((p) => String(p.type || '').toUpperCase() === 'GOODS') || products[0];
+        log('warn', `iiko: КБЖУ-полей не видно. Ключи объекта: ${Object.keys(goods || {}).join(', ')}`);
+      }
     }
 
     const today = new Date().toISOString().slice(0, 10);
@@ -175,7 +187,7 @@ export async function runSync(cfg, pushToCloud, settings, log = () => {}) {
     };
     log('info', `iiko: подготовлено ${items.length} позиций (состав ${compCount}, КБЖУ полн. ${nutrFull} / част. ${nutrPartial})`);
 
-    const res = await pushToCloud('/api/sync/nomenclature', {
+    const res = await pushToCloud('/sync/nomenclature', {
       method: 'POST',
       body: JSON.stringify({ items, stats, message: `iiko ${iiko.host}` }),
     });

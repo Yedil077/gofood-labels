@@ -70,13 +70,21 @@ export class Iiko {
 
   /** Номенклатура: id, name, num (артикул), code, type, + пищевая ценность на 100 г если задана. */
   async getProducts() {
-    let data;
-    try {
-      data = await this._json('/v2/entities/products/list?includeDeleted=false');
-    } catch {
-      data = await this._json('/products'); // запасной путь
+    const paths = [
+      '/v2/entities/products/list?includeDeleted=false&includeAdditionalInfo=true',
+      '/v2/entities/products/list?includeDeleted=false',
+      '/v2/entities/list?rootType=Product&includeDeleted=false',
+    ];
+    for (const p of paths) {
+      try {
+        const data = await this._json(p);
+        const arr = Array.isArray(data) ? data : data?.response || data?.products || [];
+        if (arr.length) return arr;
+      } catch {
+        /* пробуем следующий */
+      }
     }
-    return Array.isArray(data) ? data : data?.response || data?.products || [];
+    return [];
   }
 
   /** Технологические карты по всей номенклатуре. */
