@@ -1,19 +1,17 @@
 {
   "name": "gofood-labels",
   "private": true,
-  "version": "2.0.0",
-  "description": "GOFOOD — печать этикеток блюд (Netlify web + Windows Print Agent, Epson CW-C4030)",
+  "version": "3.0.0",
+  "description": "GOFOOD — печать этикеток блюд (Cloudflare Pages + D1 + Windows Print Agent, Epson CW-C4030)",
   "scripts": {
-    "setup": "npm install && npm --prefix web install && npm --prefix print-agent install",
-    "dev": "netlify dev",
     "build": "cd web && npm install && npm run build",
+    "dev": "npm run build && npx wrangler pages dev web/dist",
+    "deploy": "npm run build && npx wrangler pages deploy web/dist",
+    "db:init": "npx wrangler d1 execute gofood --remote --file=schema.sql",
     "test": "node --test web/src/shared/__tests__/",
     "agent": "cd print-agent && npm start"
   },
-  "dependencies": {
-    "@netlify/blobs": "^8.1.0"
-  },
   "devDependencies": {
-    "netlify-cli": "^17.38.1"
+    "wrangler": "^3.80.0"
   }
 }

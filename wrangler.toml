@@ -1,0 +1,13 @@
+name = "gofood-labels"
+pages_build_output_dir = "web/dist"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+# D1 — база данных. database_id подставить после `wrangler d1 create gofood`.
+[[d1_databases]]
+binding = "GOFOOD_DB"
+database_name = "gofood"
+database_id = "PASTE_DATABASE_ID_HERE"
+
+# Секреты GOFOOD_TOKEN / GOFOOD_AGENT_TOKEN задаются в Cloudflare Pages →
+# Settings → Environment variables (или `wrangler pages secret put`), НЕ здесь.

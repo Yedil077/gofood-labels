@@ -6,7 +6,8 @@ import {
   putJob,
   deleteJob,
   trimJobs,
-} from './lib/store.js';
+  initStore,
+} from '../_lib/store.js';
 import { mergeSettings, SETTINGS_KEYS, DISH_EDITABLE } from '../../web/src/shared/defaults.js';
 import { parseRows } from '../../web/src/shared/importParse.js';
 import { parseKbjuRows } from '../../web/src/shared/parseKbju.js';
@@ -23,10 +24,9 @@ import {
   WARNING_TEXT,
 } from '../../web/src/shared/normalize.js';
 
-export const config = { path: '/api/*' };
 
-const ADMIN_TOKEN = process.env.GOFOOD_TOKEN || '';
-const AGENT_TOKEN = process.env.GOFOOD_AGENT_TOKEN || '';
+let ADMIN_TOKEN = '';
+let AGENT_TOKEN = '';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -94,7 +94,7 @@ function normName(s) {
 
 /* ----------------------------- маршрутизация ----------------------------- */
 
-export default async function handler(req) {
+async function route(req) {
   if (req.method === 'OPTIONS') return new Response('', { status: 204, headers: CORS });
 
   const url = new URL(req.url);
@@ -655,4 +655,12 @@ async function logEvent(level, context, message, detail) {
   } catch {
     /* no-op */
   }
+}
+
+/* --- Cloudflare Pages Functions entrypoint --- */
+export async function onRequest(context) {
+  initStore(context.env);
+  ADMIN_TOKEN = context.env.GOFOOD_TOKEN || '';
+  AGENT_TOKEN = context.env.GOFOOD_AGENT_TOKEN || '';
+  return route(context.request);
 }
