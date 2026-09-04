@@ -50,8 +50,8 @@ const isAgent = (req) => {
   if (!AGENT_TOKEN && !ADMIN_TOKEN) return true;
   return t === AGENT_TOKEN || (ADMIN_TOKEN && t === ADMIN_TOKEN);
 };
-const denyAdmin = json({ error: 'Требуется токен администратора' }, 401);
-const denyAgent = json({ error: 'Требуется токен агента' }, 401);
+const denyAdmin = () => json({ error: 'Требуется токен администратора' }, 401);
+const denyAgent = () => json({ error: 'Требуется токен агента' }, 401);
 
 /* ----------------------------- данные ----------------------------- */
 
@@ -118,7 +118,7 @@ async function route(req) {
     if (seg[0] === 'settings') {
       if (method === 'GET') return json({ settings: await loadSettings() });
       if (method === 'PUT') {
-        if (!isAdmin(req)) return denyAdmin;
+        if (!isAdmin(req)) return denyAdmin();
         const stored = (await getJSON('settings', {})) || {};
         for (const [k, v] of Object.entries(body || {})) {
           if (k === 'datetime') stored.datetime = { ...DEFAULT_DATETIME_CONFIG, ...(stored.datetime || {}), ...v };
@@ -168,7 +168,7 @@ async function route(req) {
         return json({ dish: dishOut(dishes[idx], settings) });
       }
       if (seg.length === 2 && method === 'PUT') {
-        if (!isAdmin(req)) return denyAdmin;
+        if (!isAdmin(req)) return denyAdmin();
         if (idx < 0) return json({ error: 'Блюдо не найдено' }, 404);
         const d = dishes[idx];
         for (const key of DISH_EDITABLE) {
@@ -200,7 +200,7 @@ async function route(req) {
 
       // импорт КБЖУ отдельным файлом
       if (seg[1] === 'kbju' && method === 'POST') {
-        if (!isAdmin(req)) return denyAdmin;
+        if (!isAdmin(req)) return denyAdmin();
         const rows = body.rows;
         if (!Array.isArray(rows)) return json({ error: 'Ожидается { rows: [[...]] }' }, 400);
         let parsed;
@@ -234,7 +234,7 @@ async function route(req) {
         return json({ ok: true, received: parsed.rows.length, matched, notFound, columns: parsed.columns });
       }
       if (seg.length === 1 && method === 'POST') {
-        if (!isAdmin(req)) return denyAdmin;
+        if (!isAdmin(req)) return denyAdmin();
         const rows = body.rows;
         if (!Array.isArray(rows)) return json({ error: 'Ожидается { rows: [[...]] }' }, 400);
         const parsed = parseRows(rows);
@@ -381,7 +381,7 @@ async function route(req) {
     }
 
     if (path === '/print/test' && method === 'POST') {
-      if (!isAdmin(req)) return denyAdmin;
+      if (!isAdmin(req)) return denyAdmin();
       const settings = await loadSettings();
       const job = await enqueueJob({
         kind: 'test',
@@ -408,14 +408,14 @@ async function route(req) {
         });
       }
       if (seg[1] === 'run' && method === 'POST') {
-        if (!isAdmin(req)) return denyAdmin;
+        if (!isAdmin(req)) return denyAdmin();
         const job = await enqueueJob({ kind: 'sync', user: body.user || 'admin', dish: { name: '[СИНХРОНИЗАЦИЯ iiko]' } });
         await logEvent('info', 'sync', `Запрошена синхронизация, задание #${job.id}`);
         return json({ ok: true, jobId: job.id });
       }
       // агент присылает вычисленные состав + КБЖУ
       if (seg[1] === 'nomenclature' && method === 'POST') {
-        if (!isAgent(req)) return denyAgent;
+        if (!isAgent(req)) return denyAgent();
         const items = Array.isArray(body.items) ? body.items : [];
         const s0 = (await getJSON('settings', {})) || {};
         const settings = mergeSettings(s0);
@@ -534,7 +534,7 @@ async function route(req) {
         return json({ logs: level ? logs.filter((l) => l.level === level) : logs });
       }
       if (method === 'DELETE') {
-        if (!isAdmin(req)) return denyAdmin;
+        if (!isAdmin(req)) return denyAdmin();
         await setJSON('logs', []);
         return json({ ok: true });
       }
@@ -543,7 +543,7 @@ async function route(req) {
     /* --- agent: регистрация и список принтеров --- */
     if (seg[0] === 'agent') {
       if (seg[1] === 'hello' && method === 'POST') {
-        if (!isAgent(req)) return denyAgent;
+        if (!isAgent(req)) return denyAgent();
         await setJSON('agent-info', {
           agent: body.agent || 'agent',
           platform: body.platform || null,
@@ -563,7 +563,7 @@ async function route(req) {
 
     /* --- agent: очередь заданий --- */
     if (seg[0] === 'jobs') {
-      if (!isAgent(req)) return denyAgent;
+      if (!isAgent(req)) return denyAgent();
 
       if (seg.length === 1 && method === 'GET') {
         const status = url.searchParams.get('status') || 'queued';
