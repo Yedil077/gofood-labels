@@ -87,6 +87,11 @@ export class Iiko {
     return [];
   }
 
+  /** Старый XML-справочник номенклатуры — в нём есть пищевая ценность на 100 г. */
+  async getProductsXml() {
+    return this._text(`${this.base}/products?key=${encodeURIComponent(this.key)}`);
+  }
+
   /** Технологические карты по всей номенклатуре. */
   async getAssemblyCharts(dateFrom, dateTo) {
     const q = `dateFrom=${dateFrom}&dateTo=${dateTo}&includePreparedCharts=true&includeDeletedProducts=false`;
@@ -111,6 +116,32 @@ export function nutritionPer100g(p) {
   const carbs = num(pick(p, ['carbohydratesAmount', 'carbohydrates', 'carbs', 'fullAmountCarbohydrates']));
   const kcal = num(pick(p, ['energyAmount', 'energy', 'energyFullAmount', 'calories', 'fullAmountCalories']));
   return { protein, fat, carbs, kcal };
+}
+
+/**
+ * Разбирает XML `/resto/api/products` -> Map<productId, {protein,fat,carbs,kcal}> на 100 г.
+ * Парсер простой (regex по плоским тегам внутри <productDto>), без зависимостей.
+ */
+export function parseNutritionXml(xml) {
+  const map = new Map();
+  if (!xml || typeof xml !== 'string') return map;
+  const blocks = xml.split(/<productDto[\s>]/).slice(1);
+  const tag = (b, t) => {
+    const m = b.match(new RegExp(`<${t}>\\s*([^<]*?)\\s*</${t}>`, 'i'));
+    return m ? m[1] : null;
+  };
+  for (const b of blocks) {
+    const id = tag(b, 'id');
+    if (!id) continue;
+    const rec = {
+      protein: num(tag(b, 'proteinsAmount')),
+      fat: num(tag(b, 'fatAmount')),
+      carbs: num(tag(b, 'carbohydratesAmount')),
+      kcal: num(tag(b, 'energyAmount')),
+    };
+    if (rec.protein != null || rec.fat != null || rec.carbs != null || rec.kcal != null) map.set(id, rec);
+  }
+  return map;
 }
 
 export function chartProductId(chart) {

@@ -1,6 +1,7 @@
 import {
   Iiko,
   nutritionPer100g,
+  parseNutritionXml,
   chartProductId,
   chartItems,
   itemProductId,
@@ -71,6 +72,20 @@ export async function runSync(cfg, pushToCloud, settings, log = () => {}) {
       }
     }
 
+    // Пищевая ценность на 100 г — из старого XML-справочника (в JSON её нет).
+    let xmlNutr = new Map();
+    try {
+      const xml = await iiko.getProductsXml();
+      xmlNutr = parseNutritionXml(xml);
+      log('info', `iiko: пищевая ценность из XML — ${xmlNutr.size} позиций`);
+      if (xmlNutr.size === 0 && typeof xml === 'string') {
+        const first = (xml.split(/<productDto[\s>]/)[1] || '').slice(0, 700);
+        log('warn', `iiko: XML не распознан. Начало первого <productDto>: ${first}`);
+      }
+    } catch (e) {
+      log('warn', `iiko: XML-справочник недоступен (${String(e?.message || e).slice(0, 120)})`);
+    }
+
     const today = new Date().toISOString().slice(0, 10);
     const { assemblyCharts, preparedCharts } = await iiko.getAssemblyCharts(today, today);
     log('info', `iiko: техкарты на сегодня — ${assemblyCharts.length}, разложенные — ${preparedCharts.length}`);
@@ -81,8 +96,12 @@ export async function runSync(cfg, pushToCloud, settings, log = () => {}) {
 
     const P = new Map(); // id -> product
     for (const p of products) if (p && p.id != null) P.set(String(p.id), p);
-    const per100 = new Map(); // id -> {protein,fat,carbs,kcal}
-    for (const p of products) if (p && p.id != null) per100.set(String(p.id), nutritionPer100g(p));
+    const per100 = new Map(); // id -> {protein,fat,carbs,kcal} на 100 г
+    for (const p of products) {
+      if (!p || p.id == null) continue;
+      const id = String(p.id);
+      per100.set(id, xmlNutr.get(id) || nutritionPer100g(p));
+    }
 
     // группируем карты по продукту
     const groupA = new Map();
