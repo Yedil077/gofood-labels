@@ -34,7 +34,15 @@ function assetLoader(name) {
   };
 }
 const getTemplate = assetLoader('label-template.png');
-const getLogo = assetLoader('logo-gofood.png');
+const logoLoaders = {};
+function getLogo(name = 'gofood') {
+  if (!logoLoaders[name]) {
+    const primary = assetLoader(`logo-${name}.png`);
+    logoLoaders[name] = () =>
+      primary().then((img) => img || (name !== 'gofood' ? assetLoader('logo-gofood.png')() : null));
+  }
+  return logoLoaders[name]();
+}
 
 async function barcodeImage(value, bcid) {
   if (!value) return null;
@@ -100,7 +108,7 @@ export async function renderJob(job) {
     const useTemplate = rp.useTemplate === true;
     const [templateImage, logoImage] = await Promise.all([
       useTemplate ? getTemplate() : Promise.resolve(null),
-      getLogo(),
+      getLogo(data?.brand?.logo || 'gofood'),
     ]);
     drawLabel(ctx, {
       widthMm,

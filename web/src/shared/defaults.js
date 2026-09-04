@@ -36,10 +36,12 @@ export const DEFAULTS = {
   'sync.lastRunAt': null,
   'sync.lastResult': null, // { ok, matched, compositionSet, nutritionSet, nutritionPartial, message }
 
-  // Бренд / тексты
+  // Бренд / тексты. preset: 'gofood' | 'greencity' | 'custom'
+  'brand.preset': 'gofood',
   'brand.name': 'gofood',
   'brand.primaryColor': '#F2661F',
   'brand.tagline': 'Больше энергии — больше возможностей',
+  'brand.logo': 'gofood',
   'brand.fontScale': 1.0,
   'storage.text': 'Хранить в холодильнике при температуре от +2 °C до +6 °C.',
 

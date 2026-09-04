@@ -72,9 +72,11 @@ export default function SettingsTab() {
       'barcode.defaultSource': s!['barcode.defaultSource'],
       'barcode.symbology': s!['barcode.symbology'],
       'barcode.showText': !!s!['barcode.showText'],
+      'brand.preset': s!['brand.preset'] || 'gofood',
       'brand.name': s!['brand.name'],
       'brand.primaryColor': s!['brand.primaryColor'],
       'brand.tagline': s!['brand.tagline'],
+      'brand.logo': s!['brand.logo'] || 'gofood',
       'brand.fontScale': Number(s!['brand.fontScale']) || 1,
       'storage.text': s!['storage.text'],
       datetime: { ...dtClean, controlExamples },
@@ -251,23 +253,41 @@ export default function SettingsTab() {
 
       {/* --- Оформление --- */}
       <div className="card" style={{ marginTop: 18 }}>
-        <h2>Оформление и тексты</h2>
-        <div className="split2">
+        <h2>Оформление этикетки</h2>
+        <label className="fld">Бренд</label>
+        <select
+          value={s['brand.preset'] || 'gofood'}
+          onChange={(e) => set('brand.preset', e.target.value)}
+          style={{ maxWidth: 360 }}
+        >
+          <option value="gofood">gofood — «Больше энергии — больше возможностей», оранжевый</option>
+          <option value="greencity">GreenCity — «Вкусно и полезно», зелёный</option>
+          <option value="custom">Свой (поля ниже)</option>
+        </select>
+        <p className="muted" style={{ fontSize: 12 }}>
+          Пресет задаёт логотип, слоган и цвет. Макет одинаковый.
+        </p>
+        <div className="split2" style={{ marginTop: 8, opacity: (s['brand.preset'] || 'gofood') === 'custom' ? 1 : 0.5 }}>
           <div>
-            <label className="fld">Бренд</label>
+            <label className="fld">Название (custom)</label>
             <input value={s['brand.name']} onChange={(e) => set('brand.name', e.target.value)} />
-            <label className="fld">Фирменный цвет</label>
+            <label className="fld">Цвет (custom)</label>
             <input type="text" value={s['brand.primaryColor']} onChange={(e) => set('brand.primaryColor', e.target.value)} />
+            <label className="fld">Логотип-файл (custom)</label>
+            <select value={s['brand.logo'] || 'gofood'} onChange={(e) => set('brand.logo', e.target.value)}>
+              <option value="gofood">logo-gofood.png</option>
+              <option value="greencity">logo-greencity.png</option>
+            </select>
+          </div>
+          <div>
+            <label className="fld">Слоган (custom)</label>
+            <input value={s['brand.tagline']} onChange={(e) => set('brand.tagline', e.target.value)} />
             <label className="fld">Масштаб шрифта</label>
             <input type="number" step="0.05" value={s['brand.fontScale']} onChange={(e) => set('brand.fontScale', e.target.value)} />
           </div>
-          <div>
-            <label className="fld">Слоган</label>
-            <input value={s['brand.tagline']} onChange={(e) => set('brand.tagline', e.target.value)} />
-            <label className="fld">Условия хранения</label>
-            <textarea value={s['storage.text']} onChange={(e) => set('storage.text', e.target.value)} />
-          </div>
         </div>
+        <label className="fld">Условия хранения</label>
+        <textarea value={s['storage.text']} onChange={(e) => set('storage.text', e.target.value)} />
       </div>
 
       {/* --- Дата/время --- */}

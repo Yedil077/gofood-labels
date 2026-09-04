@@ -30,9 +30,12 @@ function loadOnce(src: string): Promise<HTMLImageElement | null> {
   });
 }
 let templatePromise: Promise<HTMLImageElement | null> | null = null;
-let logoPromise: Promise<HTMLImageElement | null> | null = null;
+const logoCache: Record<string, Promise<HTMLImageElement | null>> = {};
 const loadTemplate = () => (templatePromise ||= loadOnce('/label-template.png'));
-const loadLogo = () => (logoPromise ||= loadOnce('/logo-gofood.png'));
+const loadLogo = (name = 'gofood') =>
+  (logoCache[name] ||= loadOnce(`/logo-${name}.png`).then(
+    (img) => img || (name !== 'gofood' ? loadOnce('/logo-gofood.png') : null)
+  ));
 
 export function makeBarcode(value: string, symbology: string) {
   if (!value || symbology === 'qrcode') return null;
@@ -61,7 +64,7 @@ export async function renderLabelAsync(canvas: HTMLCanvasElement, data: any, rp:
   const barcode = makeBarcode(data.barcodeValue, data.symbology || rp.symbology);
   const [templateImage, logoImage] = await Promise.all([
     rp.useTemplate ? loadTemplate() : Promise.resolve(null),
-    loadLogo(),
+    loadLogo(data?.brand?.logo || 'gofood'),
   ]);
   drawLabel(ctx, {
     widthMm: rp.widthMm,

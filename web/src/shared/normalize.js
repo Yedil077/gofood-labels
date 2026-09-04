@@ -1,5 +1,6 @@
 /** Общая логика: источник штрихкода, предупреждения, нормализация блюда для этикетки. */
 import { ean13FromArtikul } from './barcode.js';
+import { resolveBrand } from './brand.js';
 
 export const WARNING_TEXT = {
   composition: 'Не заполнен состав',
@@ -62,11 +63,7 @@ export function normalizeDishForLabel(dish, settings, dt) {
     dateStr: dt?.date || '',
     timeStr: dt?.time || '',
     approximateTime: !!dt?.approximate,
-    brand: {
-      name: settings['brand.name'] || 'gofood',
-      color: settings['brand.primaryColor'] || '#F2661F',
-      tagline: settings['brand.tagline'] || '',
-    },
+    brand: resolveBrand(settings), // { name, logo, tagline, color }
     fontScale: Number(settings['brand.fontScale']) || 1,
   };
 }
