@@ -128,17 +128,22 @@ export async function runSync(cfg, pushToCloud, settings, log = () => {}) {
       const xml = await iiko.getProductsXml();
       xmlNutr = parseNutritionXml(xml);
       log('info', `iiko: пищевая ценность из XML — ${xmlNutr.size} позиций`);
-      if (xmlNutr.size === 0 && typeof xml === 'string') {
-        const first = (xml.split(/<productDto[\s>]/)[1] || '').slice(0, 700);
-        log('warn', `iiko: XML не распознан. Начало первого <productDto>: ${first}`);
+      if (xmlNutr.size === 0) {
+        const head = String(xml || '').replace(/\s+/g, ' ').slice(0, 500);
+        log('warn', `iiko: /resto/api/products вернул (первые 500): ${head || '(пусто)'}`);
       }
     } catch (e) {
-      log('warn', `iiko: XML-справочник недоступен (${String(e?.message || e).slice(0, 120)})`);
+      log('warn', `iiko: XML-справочник недоступен (${String(e?.message || e).slice(0, 160)})`);
     }
 
     const today = new Date().toISOString().slice(0, 10);
     const { assemblyCharts, preparedCharts } = await iiko.getAssemblyCharts(today, today);
     log('info', `iiko: техкарты на сегодня — ${assemblyCharts.length}, разложенные — ${preparedCharts.length}`);
+    if (assemblyCharts[0]) {
+      log('info', `iiko: поля техкарты: ${Object.keys(assemblyCharts[0]).join(', ')}`);
+      const it0 = (assemblyCharts[0].items || assemblyCharts[0].assemblyChartItems || [])[0];
+      if (it0) log('info', `iiko: поля позиции техкарты: ${Object.keys(it0).join(', ')}`);
+    }
 
     if (products.length && assemblyCharts.length === 0) {
       log('warn', 'iiko: техкарты не вернулись — проверьте права API-пользователя (нужен доступ к номенклатуре и техкартам)');
