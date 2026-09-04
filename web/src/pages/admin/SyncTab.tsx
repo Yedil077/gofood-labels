@@ -29,6 +29,8 @@ export default function SyncTab() {
       'sync.enabled': !!s!['sync.enabled'],
       'sync.everyHours': Number(s!['sync.everyHours']) || 6,
       'sync.nutritionBasis': s!['sync.nutritionBasis'] || 'portion',
+      'sync.compositionSource': s!['sync.compositionSource'] || 'expanded',
+      'sync.compositionMax': Number(s!['sync.compositionMax']) || 12,
       'sync.allowNewDishes': !!s!['sync.allowNewDishes'],
       'sync.excludeIngredients': String(s!['sync.excludeIngredients'] || [])
         ? (Array.isArray(s!['sync.excludeIngredients'])
@@ -145,6 +147,27 @@ export default function SyncTab() {
               <option value="portion">на порцию</option>
               <option value="per100g">на 100 г</option>
             </select>
+          </div>
+          <div>
+            <label className="fld">Состав из</label>
+            <select
+              value={s['sync.compositionSource'] || 'expanded'}
+              onChange={(e) => set('sync.compositionSource', e.target.value)}
+            >
+              <option value="expanded">базового сырья (черри, рис, грибы…)</option>
+              <option value="direct">как в верхней таблице техкарты</option>
+            </select>
+          </div>
+          <div>
+            <label className="fld">Максимум ингредиентов</label>
+            <input
+              type="number"
+              min={3}
+              max={30}
+              value={s['sync.compositionMax'] ?? 12}
+              onChange={(e) => set('sync.compositionMax', e.target.value)}
+              style={{ width: 90 }}
+            />
           </div>
         </div>
 

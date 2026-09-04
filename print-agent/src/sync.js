@@ -16,6 +16,51 @@ const norm = (s) =>
     .replace(/[.,;:()]+/g, '')
     .trim();
 
+// Ингредиенты, которые не показываем покупателю (техническая мелочь).
+const DEFAULT_EXCLUDE = [
+  'соль', 'вода', 'перец', 'сахар', 'масло растительное', 'масло подсолнечное',
+  'масло для фритюра', 'масло для жарки', 'крахмал', 'мука для панировки',
+  'специи', 'приправа', 'приправы', 'зира', 'куркума', 'паприка', 'лавровый лист',
+  'уксус', 'сода', 'разрыхлитель', 'дрожжи', 'желатин', 'агар', 'загуститель',
+  'кислота лимонная', 'лимонная кислота', 'ванилин', 'краситель', 'консервант',
+  'глютамат', 'бульон', 'бульонный концентрат', 'декор', 'украшение',
+];
+
+// Служебные слова, которые убираем из имени ингредиента.
+const DROP_WORDS = new Set(
+  (
+    'полуфабрикат полу фабрикат вес весовой весовая весовые весов ' +
+    'очищенный очищенная очищенные отварной отварная отварные отварнои варёный вареный ' +
+    'бланшированный пассерованный обжаренный жареный жареная тушёный тушеный ' +
+    'г гр кг мл л шт порц порция порций уп упак кус кусочки'
+  ).split(/\s+/)
+);
+// Слова, начинающиеся с этих корней — тоже убираем.
+const DROP_PREFIX = ['заготов', 'заморож', 'охлажд', 'охл', 'свеж', 'размор', 'бланшир', 'пассеров'];
+
+/** Приводит имя ингредиента к человекочитаемому виду. */
+export function cleanIngredient(raw) {
+  let s = String(raw || '')
+    .replace(/\([^)]*\)/g, ' ') // (…) убрать
+    .replace(/["'«»]/g, ' ')
+    .replace(/(^|\s)[а-яёa-z]{1,3}\/[а-яёa-z]{1,3}(?=\s|$)/gi, ' ') // п/ф, с/м, б/к
+    .replace(/№\s*\d+/g, ' ')
+    .replace(/\d+(?:[.,]\d+)?\s*(?:г|гр|кг|мл|л|%)?/gi, ' ')
+    .replace(/[._/\\]+/g, ' ');
+  const words = s
+    .split(/[\s,;:]+/)
+    .filter(Boolean)
+    .filter((w) => {
+      const lw = w.toLowerCase().replace(/[.]+$/, '');
+      if (DROP_WORDS.has(lw)) return false;
+      if (DROP_PREFIX.some((p) => lw.startsWith(p))) return false;
+      return true;
+    });
+  s = words.join(' ').replace(/\s{2,}/g, ' ').trim();
+  if (s.length < 2) return '';
+  return s.charAt(0).toLowerCase() + s.slice(1);
+}
+
 function pickChart(charts, todayISO) {
   // charts — массив версий одной техкарты; берём действующую на сегодня, иначе последнюю
   let best = null;
@@ -39,8 +84,13 @@ export async function runSync(cfg, pushToCloud, settings, log = () => {}) {
   if (!cfg.iiko || !cfg.iiko.host || !cfg.iiko.login) {
     throw new Error('В agent-config.json не заполнен блок "iiko" (host, login, password)');
   }
-  const excl = (settings['sync.excludeIngredients'] || []).map(norm).filter(Boolean);
+  const userExcl = settings['sync.excludeIngredients'];
+  const excl = (Array.isArray(userExcl) && userExcl.length ? userExcl : DEFAULT_EXCLUDE)
+    .map(norm)
+    .filter(Boolean);
   const basis = settings['sync.nutritionBasis'] || 'portion';
+  const compSource = settings['sync.compositionSource'] || 'expanded'; // 'expanded' | 'direct'
+  const compMax = Math.max(3, Math.min(30, Number(settings['sync.compositionMax']) || 12));
 
   const iiko = new Iiko(cfg.iiko);
   log('info', `iiko: авторизация на ${iiko.host}…`);
@@ -126,20 +176,32 @@ export async function runSync(cfg, pushToCloud, settings, log = () => {}) {
       if (!aCharts && !groupP.get(pid)) continue;
       dishCount++;
 
-      // --- состав: прямые ингредиенты техкарты (как в верхней таблице карточки) ---
-      let composition = '';
+      // --- состав: человекочитаемый список ингредиентов ---
       const aChart = aCharts && pickChart(aCharts, today);
-      if (aChart) {
-        const names = [];
-        for (const it of chartItems(aChart)) {
+      const pCh = groupP.get(pid) && pickChart(groupP.get(pid), today);
+      // по умолчанию — разложенная карта (базовое сырьё), иначе прямая
+      const compChart = compSource === 'direct' ? aChart || pCh : pCh || aChart;
+      let composition = '';
+      if (compChart) {
+        const acc = new Map(); // cleanName -> {name, kg}
+        for (const it of chartItems(compChart)) {
           const ing = P.get(String(itemProductId(it)));
-          const nm = ing && (ing.name || ing.productName);
+          let nm = ing && (ing.name || ing.productName);
+          if (!nm) continue;
+          nm = cleanIngredient(nm);
           if (!nm) continue;
           const low = norm(nm);
-          if (excl.some((e) => low.includes(e))) continue;
-          if (!names.some((x) => norm(x) === low)) names.push(String(nm).trim());
+          if (!low || excl.some((e) => low.includes(e))) continue;
+          const kg = itemNetKg(it) || 0;
+          const cur = acc.get(low);
+          if (cur) cur.kg += kg;
+          else acc.set(low, { name: nm, kg });
         }
-        composition = names.join(', ');
+        const list = [...acc.values()]
+          .sort((a, b) => b.kg - a.kg)
+          .slice(0, compMax)
+          .map((x) => x.name);
+        composition = list.join(', ');
         if (composition) compCount++;
       }
 

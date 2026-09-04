@@ -27,10 +27,12 @@ export const DEFAULTS = {
   // Синхронизация с iiko (выполняет Print Agent на моноблоке)
   'sync.enabled': true,
   'sync.everyHours': 6,
-  'sync.compositionBasis': 'names', // только названия ингредиентов
+  'sync.compositionSource': 'expanded', // 'expanded' — базовое сырьё; 'direct' — как в верхней таблице техкарты
+  'sync.compositionMax': 12, // максимум ингредиентов в составе (по убыванию массы)
   'sync.nutritionBasis': 'portion', // 'portion' | 'per100g'
   'sync.allowNewDishes': false, // добавлять блюда, которых нет в импорте Excel
-  'sync.excludeIngredients': ['соль', 'вода', 'перец', 'масло растительное', 'масло для жарки'],
+  // если список пуст — берётся встроенный набор технической мелочи (соль, вода, специи…)
+  'sync.excludeIngredients': [],
   'sync.lastRunAt': null,
   'sync.lastResult': null, // { ok, matched, compositionSet, nutritionSet, nutritionPartial, message }
 
