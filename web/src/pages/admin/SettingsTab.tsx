@@ -257,7 +257,25 @@ export default function SettingsTab() {
         <label className="fld">Бренд</label>
         <select
           value={s['brand.preset'] || 'gofood'}
-          onChange={(e) => set('brand.preset', e.target.value)}
+          onChange={(e) => {
+            const p = e.target.value;
+            const PRE: any = {
+              gofood: { name: 'gofood', logo: 'gofood', tagline: 'Больше энергии — больше возможностей', color: '#F2661F' },
+              greencity: { name: 'GreenCity', logo: 'greencity', tagline: 'Вкусно и полезно', color: '#8CC63F' },
+            };
+            if (PRE[p]) {
+              setS({
+                ...s,
+                'brand.preset': p,
+                'brand.name': PRE[p].name,
+                'brand.logo': PRE[p].logo,
+                'brand.tagline': PRE[p].tagline,
+                'brand.primaryColor': PRE[p].color,
+              });
+            } else {
+              set('brand.preset', p);
+            }
+          }}
           style={{ maxWidth: 360 }}
         >
           <option value="gofood">gofood — «Больше энергии — больше возможностей», оранжевый</option>
@@ -265,8 +283,38 @@ export default function SettingsTab() {
           <option value="custom">Свой (поля ниже)</option>
         </select>
         <p className="muted" style={{ fontSize: 12 }}>
-          Пресет задаёт логотип, слоган и цвет. Макет одинаковый.
+          Пресет задаёт логотип, слоган и цвет (поля ниже обновятся). <b>Нажмите «Сохранить настройки»</b>,
+          затем откройте «Печать» и обновите страницу (Ctrl+F5).
         </p>
+        <div
+          className="row"
+          style={{
+            gap: 10,
+            alignItems: 'center',
+            padding: '8px 10px',
+            border: '1px solid var(--line)',
+            borderRadius: 10,
+            marginTop: 6,
+          }}
+        >
+          <img
+            src={`/logo-${s['brand.logo'] || 'gofood'}.png`}
+            alt="logo"
+            style={{ height: 34 }}
+            onError={(e) => ((e.target as HTMLImageElement).style.opacity = '0.2')}
+          />
+          <span style={{ fontWeight: 700 }}>{s['brand.tagline']}</span>
+          <span
+            style={{
+              width: 18,
+              height: 18,
+              borderRadius: 4,
+              background: s['brand.primaryColor'],
+              display: 'inline-block',
+            }}
+          />
+          <span className="mono muted" style={{ fontSize: 12 }}>{s['brand.primaryColor']}</span>
+        </div>
         <div className="split2" style={{ marginTop: 8, opacity: (s['brand.preset'] || 'gofood') === 'custom' ? 1 : 0.5 }}>
           <div>
             <label className="fld">Название (custom)</label>
