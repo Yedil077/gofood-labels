@@ -12,8 +12,14 @@
 [functions]
   node_bundler = "esbuild"
 
-# /api/* обслуживает функция netlify/functions/api.js (в ней `export const config = { path: "/api/*" }`).
-# SPA-фолбэк (/* -> /index.html) лежит в web/public/_redirects, чтобы не мешать `netlify dev`.
+# /api/* -> функция-роутер. Явное правило в toml (важно для продакшена).
+# SPA-фолбэк (/* -> /index.html) — только в web/public/_redirects, иначе ломает `netlify dev`
+# (перехватывает /src/*.tsx и отдаёт index.html с неверным MIME).
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/api/:splat"
+  status = 200
+  force = true
 
 [dev]
   command = "npm --prefix web run dev"
