@@ -7,7 +7,10 @@ export default function ImportTab() {
   const [res, setRes] = useState<ImportResult | null>(null);
   const [err, setErr] = useState('');
   const [batches, setBatches] = useState<any[]>([]);
+  const [kbjuMsg, setKbjuMsg] = useState('');
+  const [kbjuBusy, setKbjuBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const kbjuRef = useRef<HTMLInputElement>(null);
 
   const loadBatches = () => api.importBatches().then((r) => setBatches(r.batches || []));
   useEffect(() => {
@@ -29,6 +32,22 @@ export default function ImportTab() {
     } finally {
       setBusy(false);
       if (fileRef.current) fileRef.current.value = '';
+    }
+  }
+
+  async function onKbjuFile(f: File) {
+    setKbjuBusy(true);
+    setKbjuMsg('');
+    try {
+      const rows = await xlsxFileToRows(f);
+      const r: any = await api.importKbju(f.name, rows);
+      if (r._status && r._status >= 400) throw new Error(r.error || 'Ошибка импорта КБЖУ');
+      setKbjuMsg(`Готово: обновлено ${r.matched} блюд, не найдено ${r.notFound} (из ${r.received} строк).`);
+    } catch (e: any) {
+      setKbjuMsg('Ошибка: ' + String(e?.message || e));
+    } finally {
+      setKbjuBusy(false);
+      if (kbjuRef.current) kbjuRef.current.value = '';
     }
   }
 
@@ -73,6 +92,34 @@ export default function ImportTab() {
                 <span key={i} className="tag muted">{g.name}</span>
               ))}
             </div>
+          </div>
+        )}
+      </div>
+
+      <div className="card" style={{ marginTop: 18 }}>
+        <h2>Импорт КБЖУ (.xlsx)</h2>
+        <p className="muted">
+          Разовая загрузка — iiko не отдаёт КБЖУ через API. Нужен Excel с колонками
+          <b> «Код»</b> (или «Артикул») и <b>«Белки», «Жиры», «Углеводы», «Ккал»</b> (минимум 2 из них).
+          Значения на порцию. Проставляется источник <span className="mono">import</span> —
+          синхронизация с iiko эти значения не затирает.
+          <br />
+          Где взять: iikoOffice → Номенклатура → выделить блюда → «Экспорт в Excel» → добавить
+          колонки пищевой ценности.
+        </p>
+        <input
+          ref={kbjuRef}
+          type="file"
+          accept=".xlsx,.xls"
+          style={{ display: 'none' }}
+          onChange={(e) => e.target.files?.[0] && onKbjuFile(e.target.files[0])}
+        />
+        <button className="btn" disabled={kbjuBusy} onClick={() => kbjuRef.current?.click()}>
+          {kbjuBusy ? <span className="spinner" /> : '📥'} Импортировать КБЖУ
+        </button>
+        {kbjuMsg && (
+          <div className={'banner ' + (kbjuMsg.startsWith('Ошибка') ? 'err' : 'ok')} style={{ marginTop: 12 }}>
+            {kbjuMsg}
           </div>
         )}
       </div>

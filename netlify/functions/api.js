@@ -9,6 +9,7 @@ import {
 } from './lib/store.js';
 import { mergeSettings, SETTINGS_KEYS, DISH_EDITABLE } from '../../web/src/shared/defaults.js';
 import { parseRows } from '../../web/src/shared/importParse.js';
+import { parseKbjuRows } from '../../web/src/shared/parseKbju.js';
 import {
   calculateLabelDateTime,
   DEFAULT_DATETIME_CONFIG,
@@ -195,6 +196,42 @@ export default async function handler(req) {
     if (seg[0] === 'import') {
       if (seg[1] === 'batches' && method === 'GET') {
         return json({ batches: (await getJSON('batches', [])) || [] });
+      }
+
+      // импорт КБЖУ отдельным файлом
+      if (seg[1] === 'kbju' && method === 'POST') {
+        if (!isAdmin(req)) return denyAdmin;
+        const rows = body.rows;
+        if (!Array.isArray(rows)) return json({ error: 'Ожидается { rows: [[...]] }' }, 400);
+        let parsed;
+        try {
+          parsed = parseKbjuRows(rows);
+        } catch (e) {
+          return json({ error: String(e?.message || e) }, 400);
+        }
+        const dishes = await loadDishes();
+        const byCode = new Map(dishes.filter((d) => d.code).map((d) => [String(d.code).trim(), d]));
+        const byArt = new Map(dishes.filter((d) => d.artikul).map((d) => [String(d.artikul).trim(), d]));
+        const now = new Date().toISOString();
+        let matched = 0;
+        let notFound = 0;
+        for (const r of parsed.rows) {
+          const d = (r.keyType === 'code' ? byCode.get(r.key) : byArt.get(r.key)) || byArt.get(r.key) || byCode.get(r.key);
+          if (!d) {
+            notFound++;
+            continue;
+          }
+          d.protein = num1(r.protein);
+          d.fat = num1(r.fat);
+          d.carbs = num1(r.carbs);
+          d.kcal = r.kcal == null ? null : Math.round(Number(r.kcal));
+          d.nutrition_source = 'import';
+          d.updated_at = now;
+          matched++;
+        }
+        await setJSON('dishes', dishes);
+        await logEvent('info', 'import', `Импорт КБЖУ «${body.filename || '—'}»: обновлено ${matched}, не найдено ${notFound}`);
+        return json({ ok: true, received: parsed.rows.length, matched, notFound, columns: parsed.columns });
       }
       if (seg.length === 1 && method === 'POST') {
         if (!isAdmin(req)) return denyAdmin;
@@ -445,7 +482,8 @@ export default async function handler(req) {
           const hasFull =
             it.protein != null && it.fat != null && it.carbs != null && it.kcal != null;
           const hasAny = it.protein != null || it.fat != null || it.carbs != null || it.kcal != null;
-          if (hasAny && d.nutrition_source !== 'manual') {
+          const nutrLocked = d.nutrition_source === 'manual' || d.nutrition_source === 'import';
+          if (hasAny && !nutrLocked) {
             d.protein = num1(it.protein);
             d.fat = num1(it.fat);
             d.carbs = num1(it.carbs);

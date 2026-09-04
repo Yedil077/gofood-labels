@@ -34,6 +34,11 @@ export const api = {
 
   importRows: (filename: string, rows: any[][]) =>
     req<ImportResult>('/import', { method: 'POST', body: JSON.stringify({ filename, rows }) }),
+  importKbju: (filename: string, rows: any[][]) =>
+    req<{ ok: boolean; received: number; matched: number; notFound: number; error?: string }>(
+      '/import/kbju',
+      { method: 'POST', body: JSON.stringify({ filename, rows }) }
+    ),
   importBatches: () => req<{ batches: any[] }>('/import/batches'),
 
   print: (body: { dishId: number; quantity: number; ignoreWarnings?: boolean; clientLocal?: string; user?: string }) =>
