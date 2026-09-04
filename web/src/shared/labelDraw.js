@@ -186,36 +186,55 @@ function drawVector(ctx, opts) {
   /* --- правая колонка --- */
   let y = safeMm;
   if (data.brand?.tagline) {
+    const t = fit(data.brand.tagline, rW - 6, 1, 2.7, 1.9, true);
+    ctx.font = font(t.size, true);
+    const tw = ctx.measureText(t.lines[0]).width; // px
+    const twMm = tw / pxPerMm;
+    const groupW = twMm + 4; // листок + отступ
+    const startX = xR0 + Math.max(0, (rW - groupW) / 2); // по центру колонки
     ctx.save();
     ctx.fillStyle = brand;
     ctx.beginPath();
-    ctx.ellipse(mm(xR0 + 1), mm(y + 1.3), mm(1.3), mm(0.7), -Math.PI / 4, 0, Math.PI * 2);
+    ctx.ellipse(mm(startX + 1), mm(y + 1.3), mm(1.3), mm(0.7), -Math.PI / 4, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
-    const t = fit(data.brand.tagline, rW - 4, 1, 2.7, 1.9, true);
-    text(t.lines[0], xR0 + 3.4, y, t.size, { bold: true });
-    y += Math.max(3.4, t.size * K + 1.4);
+    text(t.lines[0], startX + 3.4, y, t.size, { bold: true });
+    y += Math.max(3.2, t.size * K + 1.2);
   } else {
     y += 1;
   }
   dotted(xR0, y, xR1, y, brand);
-  y += 1.8;
-
-  cap('Название блюда', xR0, y);
-  y += 2.7;
-  const nf = fit(data.name || '—', rW, 3, 4.6, 2.6, true);
-  y = lines(nf.lines, xR0, y, nf.size, { bold: true, lh: 1.14 }) + 1.2;
-  y = Math.min(y, contentBottom - 27);
-  dotted(xR0, y, xR1, y, brand);
-  y += 2;
+  y += 1.6;
 
   const cW = (rW - 3) / 2;
   const bx = xR0 + cW + 3;
-  const midTop = y;
+
+  // Нижние два блока привязаны к низу этикетки (над плашкой «Хранить»),
+  // чтобы не оставалось пустоты. Между ними и названием — гибкий зазор.
+  const bottomOfContent = heightMm - stripH - 1.5;
+  const botH = 12.5; // штрихкод / дата-время
+  const midH = 10.5; // категория / КБЖУ
+  const botTop = bottomOfContent - botH;
+  const midTop = botTop - 1.6 - 1.8 - midH;
+
+  // --- название: по центру полосы между шапкой и mid-блоком ---
+  cap('Название блюда', xR0, y);
+  const nameTop = y + 2.6;
+  const nameBottom = midTop - 2.4;
+  let nf = fit(data.name || '—', rW, 3, 4.4, 2.4, true);
+  while (nf.size > 2.4 && nf.lines.length * nf.size * 1.14 > nameBottom - nameTop) {
+    nf = fit(data.name || '—', rW, 3, nf.size - 0.15, 2.4, true);
+  }
+  const blockH = nf.lines.length * nf.size * 1.14;
+  const nameY = nameTop + Math.max(0, (nameBottom - nameTop - blockH) / 2);
+  lines(nf.lines, xR0, nameY, nf.size, { bold: true, lh: 1.14 });
+  dotted(xR0, midTop - 2, xR1, midTop - 2, brand);
+
+  // --- категория / КБЖУ ---
   cap('Категория', xR0, midTop);
   if (data.category) {
     const cf = fit(data.category, cW, 3, 2.9, 2.1, false);
-    lines(cf.lines, xR0, midTop + 2.6, cf.size, { lh: 1.15 });
+    lines(cf.lines, xR0, midTop + 2.5, cf.size, { lh: 1.12 });
   } else {
     text('—', xR0, midTop + 2.8, 2.5, { color: GREY });
   }
@@ -230,39 +249,36 @@ function drawVector(ctx, opts) {
         `Ккал: ${k.kcal == null ? '—' : Math.round(k.kcal)}`,
       ],
       bx,
-      midTop + 2.4,
-      2.15,
-      { lh: 1.14 }
+      midTop + 2.3,
+      2.1,
+      { lh: 1.12 }
     );
   } else {
     text('—', bx, midTop + 2.8, 2.5, { color: GREY });
   }
-  y = midTop + 12.5;
-  dotted(xR0, y, xR1, y, brand);
-  y += 1.6;
-
-  const botTop = y;
+  dotted(xR0, botTop - 1.6, xR1, botTop - 1.6, brand);
   cap('Штрихкод', xR0, botTop);
   if (data.barcodeValue && barcode && barcode.image) {
-    const boxW = mm(cW + 2); // шире
-    const boxH = mm(10.5); // выше (было 9)
+    const boxW = mm(cW + 2);
+    const boxH = mm(9.5);
     const r = Math.min(boxW / barcode.width, boxH / barcode.height);
     const dw = barcode.width * r;
     const dh = barcode.height * r;
-    ctx.drawImage(barcode.image, mm(xR0), mm(botTop + 2.2), dw, dh);
+    ctx.drawImage(barcode.image, mm(xR0), mm(botTop + 2), dw, dh);
     ctx.fillStyle = INK;
-    ctx.font = font(2.5, false);
+    ctx.font = font(2.4, false);
     const t = data.barcodeValue;
     const tw = ctx.measureText(t).width;
-    ctx.fillText(t, mm(xR0) + Math.max(0, (dw - tw) / 2), mm(botTop + 2.2) + dh + mm(0.7));
+    ctx.fillText(t, mm(xR0) + Math.max(0, (dw - tw) / 2), mm(botTop + 2) + dh + mm(0.6));
   } else if (data.barcodeValue) {
     text(data.barcodeValue, xR0, botTop + 4, 3, { bold: true });
   } else {
     text('—', xR0, botTop + 5, 2.5, { color: GREY });
   }
-  cap('Дата / время изготовления', bx, botTop);
-  text(data.dateStr || '—', bx, botTop + 3.4, 3.8, { bold: true });
-  text(data.timeStr || '', bx, botTop + 8.4, 4.6, { bold: true });
+  const dx = bx + 1.5; // дата чуть правее
+  cap('Дата / время изготовления', dx, botTop);
+  text(data.dateStr || '—', dx, botTop + 3.2, 3.3, { bold: true });
+  text(data.timeStr || '', dx, botTop + 7.4, 4.1, { bold: true });
 
   /* --- нижняя полоса --- */
   const stripY = heightMm - stripH;
