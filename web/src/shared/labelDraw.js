@@ -230,31 +230,31 @@ function drawVector(ctx, opts) {
         `Ккал: ${k.kcal == null ? '—' : Math.round(k.kcal)}`,
       ],
       bx,
-      midTop + 2.6,
-      2.3,
-      { lh: 1.2 }
+      midTop + 2.4,
+      2.15,
+      { lh: 1.14 }
     );
   } else {
     text('—', bx, midTop + 2.8, 2.5, { color: GREY });
   }
-  y = midTop + 14;
+  y = midTop + 12.5;
   dotted(xR0, y, xR1, y, brand);
-  y += 2;
+  y += 1.6;
 
   const botTop = y;
   cap('Штрихкод', xR0, botTop);
   if (data.barcodeValue && barcode && barcode.image) {
-    const boxW = mm(cW);
-    const boxH = mm(9);
+    const boxW = mm(cW + 2); // шире
+    const boxH = mm(10.5); // выше (было 9)
     const r = Math.min(boxW / barcode.width, boxH / barcode.height);
     const dw = barcode.width * r;
     const dh = barcode.height * r;
-    ctx.drawImage(barcode.image, mm(xR0), mm(botTop + 2.4), dw, dh);
+    ctx.drawImage(barcode.image, mm(xR0), mm(botTop + 2.2), dw, dh);
     ctx.fillStyle = INK;
-    ctx.font = font(2.3, false);
+    ctx.font = font(2.5, false);
     const t = data.barcodeValue;
     const tw = ctx.measureText(t).width;
-    ctx.fillText(t, mm(xR0) + Math.max(0, (dw - tw) / 2), mm(botTop + 2.4) + dh + mm(0.8));
+    ctx.fillText(t, mm(xR0) + Math.max(0, (dw - tw) / 2), mm(botTop + 2.2) + dh + mm(0.7));
   } else if (data.barcodeValue) {
     text(data.barcodeValue, xR0, botTop + 4, 3, { bold: true });
   } else {

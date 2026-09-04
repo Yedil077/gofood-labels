@@ -280,6 +280,16 @@ export default function SettingsTab() {
         </div>
         <div className="row wrap">
           <div>
+            <label className="fld">Дата на этикетке</label>
+            <select
+              value={s.datetime?.dateMode ?? 'shift'}
+              onChange={(e) => setDt('dateMode', e.target.value)}
+            >
+              <option value="shift">смена: после времени ниже → следующий день</option>
+              <option value="today">всегда сегодняшняя дата</option>
+            </select>
+          </div>
+          <div>
             <label className="fld">Смена → след. день в</label>
             <input
               type="text"
@@ -289,6 +299,7 @@ export default function SettingsTab() {
                 if (m != null) setDt('shiftCutoffMin', m);
               }}
               style={{ width: 110 }}
+              disabled={(s.datetime?.dateMode ?? 'shift') === 'today'}
             />
           </div>
           <div>

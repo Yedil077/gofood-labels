@@ -25,7 +25,8 @@ export const DEFAULT_DATETIME_CONFIG = {
     { in: '2026-09-04 08:59', out: '2026-09-04 01:30' },
     { in: '2026-09-04 09:00', out: '2026-09-05 01:00' },
   ],
-  timeFallback: { mode: 'fixed', valueMin: 0 },
+  // 'passthrough' — реальное время печати; 'fixed' — всегда valueMin
+  timeFallback: { mode: 'passthrough', valueMin: 0 },
 };
 
 const pad2 = (n) => String(n).padStart(2, '0');
@@ -76,12 +77,16 @@ export function calculateLabelDateTime(currentDateTime, config = {}) {
 
   const minutesOfDay = now.getHours() * 60 + now.getMinutes();
   const labelDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
-  if (minutesOfDay >= cfg.shiftCutoffMin) labelDate.setDate(labelDate.getDate() + 1);
+  // dateMode: 'shift' — после cutoff катим на след. день; 'today' — всегда текущая дата
+  if ((cfg.dateMode || 'shift') === 'shift' && minutesOfDay >= cfg.shiftCutoffMin) {
+    labelDate.setDate(labelDate.getDate() + 1);
+  }
 
   const fb = cfg.timeFallback || DEFAULT_DATETIME_CONFIG.timeFallback;
   let hh = 0;
   let mm = 0;
-  if (fb.mode === 'passthrough') {
+  const passthrough = fb.mode === 'passthrough';
+  if (passthrough) {
     hh = now.getHours();
     mm = now.getMinutes();
   } else {
@@ -95,8 +100,9 @@ export function calculateLabelDateTime(currentDateTime, config = {}) {
     date: fmtDate(labelDate),
     time: fmtTime(labelDate),
     iso: labelDate.toISOString(),
-    approximate: true,
-    ruleId: 'fallback',
+    // passthrough = реальное время, это точный ответ; fixed = заглушка
+    approximate: !passthrough,
+    ruleId: passthrough ? 'realtime' : 'fallback',
   };
 }
 

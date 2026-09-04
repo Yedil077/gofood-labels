@@ -22,9 +22,25 @@ for (const [input, date, time] of CASES) {
   });
 }
 
-test('правило ДАТЫ вне контрольных примеров: до 09:00 -> сегодня, время approximate', () => {
+test('вне контрольных примеров: до 09:00 -> сегодня, время = реальное (passthrough)', () => {
   const r = calculateLabelDateTime('2026-09-10 05:30');
   assert.equal(r.date, '10.09.2026');
+  assert.equal(r.time, '05:30');
+  assert.equal(r.approximate, false);
+  assert.equal(r.ruleId, 'realtime');
+});
+
+test('dateMode:today -> всегда текущая дата', () => {
+  const r = calculateLabelDateTime('2026-09-10 22:00', { dateMode: 'today', controlExamples: [] });
+  assert.equal(r.date, '10.09.2026');
+});
+
+test('timeFallback fixed -> approximate:true, заглушка', () => {
+  const r = calculateLabelDateTime('2026-09-10 05:30', {
+    controlExamples: [],
+    timeFallback: { mode: 'fixed', valueMin: 0 },
+  });
+  assert.equal(r.time, '00:00');
   assert.equal(r.approximate, true);
 });
 
