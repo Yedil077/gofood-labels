@@ -92,6 +92,22 @@ export class Iiko {
     return this._text(`${this.base}/products?key=${encodeURIComponent(this.key)}`);
   }
 
+  /** Группы номенклатуры: id -> name (для отсева упаковки/инвентаря). */
+  async getProductGroups() {
+    const map = new Map();
+    for (const path of ['/v2/entities/productGroups/list', '/v2/entities/list?rootType=ProductGroup']) {
+      try {
+        const data = await this._json(path);
+        const arr = Array.isArray(data) ? data : data?.response || [];
+        for (const g of arr) if (g && g.id) map.set(String(g.id), g.name || '');
+        if (map.size) return map;
+      } catch {
+        /* следующий путь */
+      }
+    }
+    return map;
+  }
+
   /** Технологические карты по всей номенклатуре. */
   async getAssemblyCharts(dateFrom, dateTo) {
     const q = `dateFrom=${dateFrom}&dateTo=${dateTo}&includePreparedCharts=true&includeDeletedProducts=false`;

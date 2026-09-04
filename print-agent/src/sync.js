@@ -38,6 +38,24 @@ const DROP_WORDS = new Set(
 // Слова, начинающиеся с этих корней — тоже убираем.
 const DROP_PREFIX = ['заготов', 'заморож', 'охлажд', 'охл', 'свеж', 'размор', 'бланшир', 'пассеров'];
 
+// Упаковка / инвентарь / расходники — НЕ ингредиенты.
+const PACK_RX =
+  /контейн|крышк|соусник|стакан|стаканч|пакет|коробк|упаковк|ланч|бумаг|салфет|прибор|вилк|ложк|нож\b|шпаж|зубочист|трубочк|наклей|этикет|стрейч|пл[её]нк|термоусад|лоток|бланк|промоуш|тар[аы]\b|расходн|инвентар|перчат|фольг/i;
+// Маркетинговые метки / названия рационов (не ингредиенты).
+const TAG_RX = /(^|\s)\+|\b(обед|ужин|завтрак|полдник|перекус|детокс|рацион|программа|день\s*\d)\b/i;
+
+/** true, если продукт похож на реальный пищевой ингредиент. */
+function isFoodItem(prod, groupName) {
+  if (!prod) return false;
+  const t = String(prod.type || prod.productType || '').toUpperCase();
+  if (t && !['GOODS', 'PREPARED', 'DISH'].includes(t)) return false;
+  const nm = String(prod.name || prod.productName || '');
+  if (!nm || PACK_RX.test(nm)) return false;
+  const gn = groupName ? groupName(prod.parent) : '';
+  if (gn && PACK_RX.test(gn)) return false;
+  return true;
+}
+
 /** Приводит имя ингредиента к человекочитаемому виду. */
 export function cleanIngredient(raw) {
   let s = String(raw || '')
@@ -89,8 +107,8 @@ export async function runSync(cfg, pushToCloud, settings, log = () => {}) {
     .map(norm)
     .filter(Boolean);
   const basis = settings['sync.nutritionBasis'] || 'portion';
-  const compSource = settings['sync.compositionSource'] || 'expanded'; // 'expanded' | 'direct'
-  const compMax = Math.max(3, Math.min(30, Number(settings['sync.compositionMax']) || 12));
+  const compSource = settings['sync.compositionSource'] || 'direct'; // 'direct' — чище; 'expanded' — глубже
+  const compMax = Math.max(3, Math.min(30, Number(settings['sync.compositionMax']) || 10));
 
   const iiko = new Iiko(cfg.iiko);
   log('info', `iiko: авторизация на ${iiko.host}…`);
@@ -144,10 +162,29 @@ export async function runSync(cfg, pushToCloud, settings, log = () => {}) {
       const it0 = (assemblyCharts[0].items || assemblyCharts[0].assemblyChartItems || [])[0];
       if (it0) log('info', `iiko: поля позиции техкарты: ${Object.keys(it0).join(', ')}`);
     }
+    // разовая диагностика поиска КБЖУ
+    if (products[0]) {
+      log('info', `iiko DIAG product[0]: ${JSON.stringify(products[0]).slice(0, 1200)}`);
+    }
+    if (assemblyCharts[0]) {
+      log('info', `iiko DIAG chart[0]: ${JSON.stringify(assemblyCharts[0]).slice(0, 1400)}`);
+    }
+    if (preparedCharts[0]) {
+      log('info', `iiko DIAG prepared[0]: ${JSON.stringify(preparedCharts[0]).slice(0, 1400)}`);
+    }
 
     if (products.length && assemblyCharts.length === 0) {
       log('warn', 'iiko: техкарты не вернулись — проверьте права API-пользователя (нужен доступ к номенклатуре и техкартам)');
     }
+
+    // группы номенклатуры — для отсева упаковки
+    let groups = new Map();
+    try {
+      groups = await iiko.getProductGroups();
+    } catch {
+      /* no-op */
+    }
+    const groupName = (id) => (id != null ? groups.get(String(id)) || '' : '');
 
     const P = new Map(); // id -> product
     for (const p of products) if (p && p.id != null) P.set(String(p.id), p);
@@ -191,13 +228,15 @@ export async function runSync(cfg, pushToCloud, settings, log = () => {}) {
         const acc = new Map(); // cleanName -> {name, kg}
         for (const it of chartItems(compChart)) {
           const ing = P.get(String(itemProductId(it)));
-          let nm = ing && (ing.name || ing.productName);
-          if (!nm) continue;
-          nm = cleanIngredient(nm);
+          if (!isFoodItem(ing, groupName)) continue; // не упаковка/инвентарь/модификатор
+          const kg = itemNetKg(it) || 0;
+          if (kg <= 0.0003) continue; // нет реального веса -> не пищевой ингредиент
+          const rawNm = ing.name || ing.productName || '';
+          if (TAG_RX.test(rawNm)) continue; // маркетинговые метки
+          const nm = cleanIngredient(rawNm);
           if (!nm) continue;
           const low = norm(nm);
-          if (!low || excl.some((e) => low.includes(e))) continue;
-          const kg = itemNetKg(it) || 0;
+          if (!low || low.length < 2 || excl.some((e) => low.includes(e))) continue;
           const cur = acc.get(low);
           if (cur) cur.kg += kg;
           else acc.set(low, { name: nm, kg });

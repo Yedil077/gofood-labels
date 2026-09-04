@@ -27,8 +27,8 @@ export const DEFAULTS = {
   // Синхронизация с iiko (выполняет Print Agent на моноблоке)
   'sync.enabled': true,
   'sync.everyHours': 6,
-  'sync.compositionSource': 'expanded', // 'expanded' — базовое сырьё; 'direct' — как в верхней таблице техкарты
-  'sync.compositionMax': 12, // максимум ингредиентов в составе (по убыванию массы)
+  'sync.compositionSource': 'direct', // 'direct' — ингредиенты техкарты (чище); 'expanded' — до базового сырья
+  'sync.compositionMax': 10, // максимум ингредиентов в составе (по убыванию массы)
   'sync.nutritionBasis': 'portion', // 'portion' | 'per100g'
   'sync.allowNewDishes': false, // добавлять блюда, которых нет в импорте Excel
   // если список пуст — берётся встроенный набор технической мелочи (соль, вода, специи…)

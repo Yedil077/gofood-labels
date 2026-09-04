@@ -157,15 +157,30 @@ function drawVector(ctx, opts) {
     ctx.fillText('gofood', mm(xL0), mm(safeMm + 8));
   }
 
-  /* --- состав --- */
+  /* --- состав (жёстко в границах, не заезжает на нижнюю плашку) --- */
   const compTop = safeMm + logoBoxH + 3;
+  const compTextTop = compTop + 6.2;
+  const compBottom = heightMm - stripH - 2; // не ниже нижней плашки
   text('Состав', xL0, compTop, 3.2, { bold: true });
   dotted(xL0, compTop + 4.6, xL0 + xLw, compTop + 4.6, brand);
   if (data.composition && data.composition.trim()) {
-    const f = fit(data.composition, xLw, 20, 2.5, 1.7, false);
-    lines(f.lines, xL0, compTop + 6.2, f.size, { lh: 1.25 });
+    const avail = compBottom - compTextTop;
+    let size = 2.5;
+    let f = fit(data.composition, xLw, 40, size, 1.6, false);
+    // подбираем размер, чтобы все строки влезли по высоте
+    while (size > 1.6 && f.lines.length * f.size * 1.24 > avail) {
+      size = Math.round((size - 0.1) * 10) / 10;
+      f = fit(data.composition, xLw, 40, size, 1.6, false);
+    }
+    const maxLines = Math.max(1, Math.floor(avail / (f.size * 1.24)));
+    let out = f.lines.slice(0, maxLines);
+    if (f.lines.length > maxLines && out.length) {
+      let last = out[out.length - 1].replace(/[,\s]+$/, '');
+      out[out.length - 1] = last + '…';
+    }
+    lines(out, xL0, compTextTop, f.size, { lh: 1.24 });
   } else {
-    text('—', xL0, compTop + 6.4, 2.4, { color: GREY });
+    text('—', xL0, compTextTop, 2.4, { color: GREY });
   }
 
   /* --- правая колонка --- */
