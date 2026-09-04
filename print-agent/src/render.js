@@ -23,6 +23,18 @@ try {
 }
 const FF = `${FONT_FAMILY}, Arial, sans-serif`;
 
+// Фон-макет (фирменная картинка). Грузим один раз.
+const TEMPLATE_PATH = path.join(__dirname, '..', 'assets', 'label-template.png');
+let templateImagePromise = null;
+function getTemplate() {
+  if (templateImagePromise === null) {
+    templateImagePromise = fs.existsSync(TEMPLATE_PATH)
+      ? loadImage(TEMPLATE_PATH).catch(() => null)
+      : Promise.resolve(null);
+  }
+  return templateImagePromise;
+}
+
 async function barcodeImage(value, bcid) {
   if (!value) return null;
   try {
@@ -84,6 +96,7 @@ export async function renderJob(job) {
   } else {
     const data = job.label || {};
     const bc = await barcodeImage(data.barcodeValue, data.symbology || rp.symbology);
+    const templateImage = rp.useTemplate === false ? null : await getTemplate();
     drawLabel(ctx, {
       widthMm,
       heightMm,
@@ -91,6 +104,7 @@ export async function renderJob(job) {
       safeMm: Number(rp.safeMm) || 3,
       data,
       fontFamily: FF,
+      templateImage,
       barcode: bc,
     });
   }

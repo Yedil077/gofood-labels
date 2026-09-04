@@ -9,12 +9,14 @@ export const DEFAULTS = {
   'print.scale': 'noscale', // 'noscale' | 'fit' | 'shrink'
   'print.defaultCopies': 1,
 
-  // Геометрия этикетки
-  'label.widthMm': 100,
+  // Геометрия этикетки. Соотношение фирменного макета 1556:1011 ≈ 1.54 -> 108×70 мм 1:1.
+  // Если физический носитель другого размера — поменяйте здесь, макет растянется по размеру.
+  'label.widthMm': 108,
   'label.heightMm': 70,
   'label.dpi': 300,
   'label.printRotationDeg': 0,
   'label.safeMm': 3,
+  'label.useTemplate': true, // фон = фирменная картинка web/public/label-template.png
 
   // Штрихкод
   'barcode.defaultSource': 'ean13', // 'ean13' (из Артикула) | 'code' | 'artikul'

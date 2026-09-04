@@ -1,10 +1,14 @@
 /**
  * Отрисовка этикетки на 2D-контексте канваса.
  * Работает одинаково в браузере (CanvasRenderingContext2D) и в Node (@napi-rs/canvas).
- * Никаких импортов, файлов, сети — только операции рисования.
  *
- * Штрихкод передаётся уже готовым изображением (browser: <canvas>/ImageBitmap,
- * node: Image из loadImage) в поле `barcode`.
+ * ОСНОВНОЙ режим: фон = фирменная картинка-макет (`templateImage`, 1556×1011),
+ * поверх подставляются только значения (название, категория, КБЖУ, штрихкод, дата/время, состав).
+ * Заголовки полей, логотип, слоган, рамки и нижний блок «Хранить…» уже в картинке.
+ *
+ * Если `templateImage` не передан — рисуется резервный векторный макет (drawLabelFallback).
+ *
+ * `barcode` — уже готовое изображение штрихкода (browser: <canvas>/ImageBitmap, node: Image).
  */
 
 const fmtNum = (v) => {
@@ -14,54 +18,176 @@ const fmtNum = (v) => {
   return Number.isInteger(n) ? String(n) : n.toFixed(1);
 };
 
-/**
- * @param {CanvasRenderingContext2D} ctx
- * @param {{
- *   widthMm:number, heightMm:number, pxPerMm:number, safeMm?:number,
- *   data:object, fontFamily?:string,
- *   barcode?:{image:any,width:number,height:number}|null
- * }} opts
- */
-export function drawLabel(ctx, opts) {
-  const {
-    widthMm,
-    heightMm,
-    pxPerMm,
-    safeMm = 3,
-    data,
-    fontFamily = 'Arial, "Segoe UI", sans-serif',
-    barcode = null,
-  } = opts;
+/* Зоны для значений — доли от размера макета (1556×1011). Измерено по картинке. */
+const Z = {
+  composition: { x: 0.032, y: 0.602, w: 0.260, h: 0.330, size: 0.0225, min: 0.017, lines: 13, lh: 1.26 },
+  name: { x: 0.334, y: 0.246, w: 0.628, h: 0.150, size: 0.040, min: 0.026, lines: 3, lh: 1.06, bold: true },
+  category: { x: 0.334, y: 0.492, w: 0.298, h: 0.055, size: 0.030, min: 0.020, lines: 2, lh: 1.1 },
+  kbju: { x: 0.676, y: 0.478, w: 0.300, h: 0.095, size: 0.026, min: 0.019, lh: 1.3 },
+  barcode: { x: 0.333, y: 0.665, w: 0.300, h: 0.076 },
+  barcodeText: { x: 0.333, y: 0.752, w: 0.300, size: 0.024 },
+  date: { x: 0.677, y: 0.676, size: 0.043, bold: true },
+  time: { x: 0.677, y: 0.723, size: 0.052, bold: true },
+};
 
+export function drawLabel(ctx, opts) {
+  const { widthMm, heightMm, pxPerMm, data, templateImage = null, barcode = null } = opts;
+  const fontFamily = opts.fontFamily || 'Arial, "Segoe UI", sans-serif';
+  const W = widthMm * pxPerMm;
+  const H = heightMm * pxPerMm;
+
+  ctx.save();
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, W, H);
+
+  if (!templateImage) {
+    drawLabelFallback(ctx, opts);
+    ctx.restore();
+    return;
+  }
+
+  // фон-макет во весь размер
+  ctx.drawImage(templateImage, 0, 0, W, H);
+  ctx.textBaseline = 'top';
+  const INK = '#141210';
+
+  const font = (frac, bold) => `${bold ? 'bold ' : ''}${Math.max(6, frac * H)}px ${fontFamily}`;
+
+  function wrap(str, maxW, f) {
+    ctx.font = f;
+    const words = String(str).split(/\s+/).filter(Boolean);
+    const lines = [];
+    let cur = '';
+    for (const wd of words) {
+      const t = cur ? cur + ' ' + wd : wd;
+      if (!cur || ctx.measureText(t).width <= maxW) cur = t;
+      else {
+        lines.push(cur);
+        cur = wd;
+      }
+    }
+    if (cur) lines.push(cur);
+    return lines;
+  }
+
+  function fitLines(str, maxWpx, maxLines, startFrac, minFrac, bold) {
+    let s = startFrac;
+    let lines = wrap(str, maxWpx, font(s, bold));
+    let guard = 0;
+    while (
+      guard++ < 120 &&
+      s > minFrac &&
+      (lines.length > maxLines || lines.some((l) => ctx.measureText(l).width > maxWpx))
+    ) {
+      s = Math.max(minFrac, s - 0.0015);
+      lines = wrap(str, maxWpx, font(s, bold));
+    }
+    if (lines.length > maxLines) {
+      lines = lines.slice(0, maxLines);
+      ctx.font = font(s, bold);
+      let last = lines[maxLines - 1];
+      while (last.length > 1 && ctx.measureText(last + '…').width > maxWpx) last = last.slice(0, -1);
+      lines[maxLines - 1] = last + '…';
+    }
+    return { lines, size: s };
+  }
+
+  function drawBlock(str, z) {
+    if (!str) return;
+    const maxW = z.w * W;
+    const { lines, size } = fitLines(str, maxW, z.lines || 1, z.size, z.min || z.size, z.bold);
+    ctx.fillStyle = INK;
+    ctx.font = font(size, z.bold);
+    const step = size * H * (z.lh || 1.15);
+    let y = z.y * H;
+    for (const l of lines) {
+      ctx.fillText(l, z.x * W, y);
+      y += step;
+    }
+  }
+
+  // --- название блюда ---
+  drawBlock(data.name || '', Z.name);
+
+  // --- категория ---
+  drawBlock(data.category || '', Z.category);
+
+  // --- КБЖУ (2 строки, пусто если данных нет) ---
+  const k = data.kbju || {};
+  if (k.protein != null || k.fat != null || k.carbs != null || k.kcal != null) {
+    ctx.fillStyle = INK;
+    ctx.font = font(Z.kbju.size, false);
+    const step = Z.kbju.size * H * Z.kbju.lh;
+    const x = Z.kbju.x * W;
+    let y = Z.kbju.y * H;
+    ctx.fillText(`Б: ${fmtNum(k.protein)} г    Ж: ${fmtNum(k.fat)} г`, x, y);
+    ctx.fillText(`У: ${fmtNum(k.carbs)} г    Ккал: ${k.kcal == null ? '—' : Math.round(k.kcal)}`, x, y + step);
+  }
+
+  // --- штрихкод ---
+  if (data.barcodeValue && barcode && barcode.image) {
+    const bx = Z.barcode.x * W;
+    const by = Z.barcode.y * H;
+    const bw = Z.barcode.w * W;
+    const bh = Z.barcode.h * H;
+    const r = Math.min(bw / barcode.width, bh / barcode.height);
+    const dw = barcode.width * r;
+    const dh = barcode.height * r;
+    ctx.drawImage(barcode.image, bx + (bw - dw) / 2, by, dw, dh);
+    ctx.fillStyle = INK;
+    ctx.font = font(Z.barcodeText.size, false);
+    const t = data.barcodeValue;
+    const tw = ctx.measureText(t).width;
+    ctx.fillText(t, Z.barcodeText.x * W + (Z.barcodeText.w * W - tw) / 2, Z.barcodeText.y * H);
+  } else if (data.barcodeValue) {
+    ctx.fillStyle = INK;
+    ctx.font = font(Z.barcode.h * 0.6, true);
+    ctx.fillText(data.barcodeValue, Z.barcode.x * W, Z.barcode.y * H + Z.barcode.h * H * 0.2);
+  }
+
+  // --- дата / время ---
+  ctx.fillStyle = INK;
+  ctx.font = font(Z.date.size, Z.date.bold);
+  ctx.fillText(data.dateStr || '', Z.date.x * W, Z.date.y * H);
+  ctx.font = font(Z.time.size, Z.time.bold);
+  ctx.fillText(data.timeStr || '', Z.time.x * W, Z.time.y * H);
+
+  // --- состав ---
+  drawBlock(data.composition || '', Z.composition);
+
+  ctx.restore();
+}
+
+/* ======================= РЕЗЕРВНЫЙ ВЕКТОРНЫЙ МАКЕТ ======================= */
+
+export function drawLabelFallback(ctx, opts) {
+  const { widthMm, heightMm, pxPerMm, safeMm = 3, data } = opts;
+  const barcode = opts.barcode || null;
+  const FF = opts.fontFamily || 'Arial, "Segoe UI", sans-serif';
   const K = data.fontScale || 1;
   const mm = (v) => v * pxPerMm;
   const brand = data.brand?.color || '#F2661F';
   const GREY = '#8a8a8a';
   const LINE = '#dcdcdc';
   const INK = '#111111';
-  const FF = fontFamily;
 
-  ctx.save();
-  ctx.fillStyle = '#ffffff';
+  ctx.fillStyle = '#fff';
   ctx.fillRect(0, 0, mm(widthMm), mm(heightMm));
   ctx.textBaseline = 'top';
-
-  const font = (sizeMm, bold = false) =>
-    `${bold ? 'bold ' : ''}${Math.max(6, mm(sizeMm * K))}px ${FF}`;
-
-  const text = (str, xMm, yMm, sizeMm, { bold = false, color = INK } = {}) => {
-    ctx.fillStyle = color;
-    ctx.font = font(sizeMm, bold);
-    ctx.fillText(str, mm(xMm), mm(yMm));
+  const font = (s, b) => `${b ? 'bold ' : ''}${Math.max(6, mm(s * K))}px ${FF}`;
+  const text = (s, x, y, sz, o = {}) => {
+    ctx.fillStyle = o.color || INK;
+    ctx.font = font(sz, o.bold);
+    ctx.fillText(s, mm(x), mm(y));
   };
-  const caption = (str, xMm, yMm) => {
+  const cap = (s, x, y) => {
     ctx.fillStyle = GREY;
     ctx.font = font(1.9, true);
-    ctx.fillText(String(str).toUpperCase(), mm(xMm), mm(yMm));
+    ctx.fillText(String(s).toUpperCase(), mm(x), mm(y));
   };
-  const dotted = (x1, y1, x2, y2, color = LINE) => {
+  const dotted = (x1, y1, x2, y2, c = LINE) => {
     ctx.save();
-    ctx.strokeStyle = color;
+    ctx.strokeStyle = c;
     ctx.lineWidth = Math.max(1, mm(0.22));
     ctx.setLineDash([mm(0.7), mm(0.8)]);
     ctx.beginPath();
@@ -70,56 +196,45 @@ export function drawLabel(ctx, opts) {
     ctx.stroke();
     ctx.restore();
   };
-  const wrap = (str, maxWmm, fontStr) => {
-    ctx.font = fontStr;
-    const words = String(str).split(/\s+/).filter(Boolean);
-    const lines = [];
-    let cur = '';
-    for (const wd of words) {
-      const trial = cur ? cur + ' ' + wd : wd;
-      if (!cur || ctx.measureText(trial).width <= mm(maxWmm)) cur = trial;
+  const wrap = (s, mw, f) => {
+    ctx.font = f;
+    const w = String(s).split(/\s+/).filter(Boolean);
+    const L = [];
+    let c = '';
+    for (const x of w) {
+      const t = c ? c + ' ' + x : x;
+      if (!c || ctx.measureText(t).width <= mm(mw)) c = t;
       else {
-        lines.push(cur);
-        cur = wd;
+        L.push(c);
+        c = x;
       }
     }
-    if (cur) lines.push(cur);
-    return lines;
+    if (c) L.push(c);
+    return L;
   };
-  const fit = (str, maxWmm, maxLines, startMm, minMm, bold) => {
-    let size = startMm;
-    let lines = wrap(str, maxWmm, font(size, bold));
-    let guard = 0;
-    while (
-      guard++ < 120 &&
-      size > minMm &&
-      (lines.length > maxLines || lines.some((l) => ctx.measureText(l).width > mm(maxWmm)))
-    ) {
-      size = Math.max(minMm, Math.round((size - 0.15) * 100) / 100);
-      lines = wrap(str, maxWmm, font(size, bold));
+  const fit = (s, mw, ml, st, mn, b) => {
+    let sz = st;
+    let L = wrap(s, mw, font(sz, b));
+    let g = 0;
+    while (g++ < 120 && sz > mn && (L.length > ml || L.some((l) => ctx.measureText(l).width > mm(mw)))) {
+      sz = Math.max(mn, Math.round((sz - 0.15) * 100) / 100);
+      L = wrap(s, mw, font(sz, b));
     }
-    if (lines.length > maxLines) {
-      lines = lines.slice(0, maxLines);
-      ctx.font = font(size, bold);
-      let last = lines[maxLines - 1];
-      while (last.length > 1 && ctx.measureText(last + '…').width > mm(maxWmm)) last = last.slice(0, -1);
-      lines[maxLines - 1] = last + '…';
-    }
-    return { lines, size };
+    if (L.length > ml) L = L.slice(0, ml);
+    return { lines: L, size: sz };
   };
-  const drawLines = (lines, xMm, yMm, sizeMm, { bold = false, color = INK, lh = 1.16 } = {}) => {
-    ctx.fillStyle = color;
-    ctx.font = font(sizeMm, bold);
-    const step = sizeMm * K * lh;
-    let y = yMm;
-    for (const l of lines) {
-      ctx.fillText(l, mm(xMm), mm(y));
-      y += step;
+  const lines = (L, x, y, sz, o = {}) => {
+    ctx.fillStyle = o.color || INK;
+    ctx.font = font(sz, o.bold);
+    const st = sz * K * (o.lh || 1.16);
+    let yy = y;
+    for (const l of L) {
+      ctx.fillText(l, mm(x), mm(yy));
+      yy += st;
     }
-    return y;
+    return yy;
   };
 
-  /* геометрия */
   const dividerX = Math.round(widthMm * 0.31);
   const xL0 = safeMm;
   const xLw = dividerX - safeMm - 2;
@@ -137,178 +252,77 @@ export function drawLabel(ctx, opts) {
   ctx.lineTo(mm(dividerX), mm(contentBottom));
   ctx.stroke();
 
-  /* левая колонка */
-  drawLogo(ctx, mm, brand, FF, xL0, safeMm + 1, Math.min(14, xLw - 2));
-  const compTop = safeMm + 24;
-  text('Состав', xL0, compTop, 3.2, { bold: true });
-  dotted(xL0, compTop + 4.6, xL0 + xLw, compTop + 4.6, brand);
-  if (data.composition && data.composition.trim()) {
-    const f = fit(data.composition, xLw, 22, 2.5, 1.8, false);
-    drawLines(f.lines, xL0, compTop + 6.2, f.size, { lh: 1.25 });
-  } else {
-    text('не указан', xL0, compTop + 6.4, 2.3, { color: GREY });
-    for (let i = 0; i < 5; i++) dotted(xL0, compTop + 12 + i * 4, xL0 + xLw, compTop + 12 + i * 4);
-  }
+  ctx.fillStyle = '#111';
+  ctx.font = `bold ${mm(5.6)}px ${FF}`;
+  ctx.fillText('gofood', mm(xL0), mm(safeMm + 10));
+  text('Состав', xL0, safeMm + 22, 3.2, { bold: true });
+  dotted(xL0, safeMm + 26.6, xL0 + xLw, safeMm + 26.6, brand);
+  if (data.composition) lines(fit(data.composition, xLw, 22, 2.5, 1.8).lines, xL0, safeMm + 28, 2.5, { lh: 1.25 });
 
-  /* правая колонка */
   let y = safeMm;
   if (data.brand?.tagline) {
-    ctx.save();
-    ctx.fillStyle = brand;
-    ctx.beginPath();
-    ctx.ellipse(mm(xR0 + 1), mm(y + 1.3), mm(1.3), mm(0.7), -Math.PI / 4, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
     const t = fit(data.brand.tagline, rW - 4, 1, 2.7, 1.9, true);
-    text(t.lines[0], xR0 + 3.4, y, t.size, { bold: true });
-    y += Math.max(3.4, t.size * K + 1.4);
-  } else {
-    y += 1;
+    text(t.lines[0], xR0, y, t.size, { bold: true, color: brand });
+    y += 4.2;
   }
   dotted(xR0, y, xR1, y, brand);
   y += 1.8;
-
-  caption('Название блюда', xR0, y);
+  cap('Название блюда', xR0, y);
   y += 2.7;
   const nf = fit(data.name || '—', rW, 3, 4.6, 2.6, true);
-  y = drawLines(nf.lines, xR0, y, nf.size, { bold: true, lh: 1.14 }) + 1.2;
+  y = lines(nf.lines, xR0, y, nf.size, { bold: true, lh: 1.14 }) + 1.2;
   y = Math.min(y, contentBottom - 27);
   dotted(xR0, y, xR1, y, brand);
   y += 2;
-
-  const colGap = 3;
-  const cW = (rW - colGap) / 2;
-  const bx = xR0 + cW + colGap;
-  const midTop = y;
-  caption('Категория', xR0, midTop);
-  if (data.category) {
-    const cf = fit(data.category, cW, 3, 2.9, 2.1, false);
-    drawLines(cf.lines, xR0, midTop + 2.6, cf.size, { lh: 1.15 });
-  } else {
-    text('не указана', xR0, midTop + 2.8, 2.5, { color: GREY });
-  }
-  caption('КБЖУ', bx, midTop);
-  const k = data.kbju || {};
-  const anyK = k.protein != null || k.fat != null || k.carbs != null || k.kcal != null;
-  if (anyK) {
-    drawLines(
+  const cW = (rW - 3) / 2;
+  const bx = xR0 + cW + 3;
+  cap('Категория', xR0, y);
+  if (data.category) lines(fit(data.category, cW, 3, 2.9, 2.1).lines, xR0, y + 2.6, 2.7, { lh: 1.15 });
+  cap('КБЖУ', bx, y);
+  const kk = data.kbju || {};
+  if (kk.protein != null || kk.fat != null || kk.carbs != null || kk.kcal != null) {
+    lines(
       [
-        `Белки: ${fmtNum(k.protein)} г`,
-        `Жиры: ${fmtNum(k.fat)} г`,
-        `Углеводы: ${fmtNum(k.carbs)} г`,
-        `Ккал: ${fmtNum(k.kcal)}`,
+        `Белки: ${fmtNum(kk.protein)} г`,
+        `Жиры: ${fmtNum(kk.fat)} г`,
+        `Углеводы: ${fmtNum(kk.carbs)} г`,
+        `Ккал: ${kk.kcal == null ? '—' : Math.round(kk.kcal)}`,
       ],
       bx,
-      midTop + 2.6,
+      y + 2.6,
       2.3,
       { lh: 1.2 }
     );
-  } else {
-    text('нет данных', bx, midTop + 2.8, 2.5, { color: GREY });
   }
-  y = midTop + 14;
+  y += 14;
   dotted(xR0, y, xR1, y, brand);
   y += 2;
-
-  const botTop = y;
-  caption('Штрихкод', xR0, botTop);
+  cap('Штрихкод', xR0, y);
   if (data.barcodeValue && barcode && barcode.image) {
-    const boxW = mm(cW);
-    const boxH = mm(data.symbology === 'qrcode' ? 13 : 9);
-    const ratio = Math.min(boxW / barcode.width, boxH / barcode.height);
-    const dw = barcode.width * ratio;
-    const dh = barcode.height * ratio;
-    ctx.drawImage(barcode.image, mm(xR0), mm(botTop + 2.4), dw, dh);
-    if (data.showBarcodeText) {
-      ctx.fillStyle = INK;
-      ctx.font = font(2.3, false);
-      const tw = ctx.measureText(data.barcodeValue).width;
-      ctx.fillText(data.barcodeValue, mm(xR0) + Math.max(0, (dw - tw) / 2), mm(botTop + 2.4) + dh + mm(0.8));
-    }
-  } else if (data.barcodeValue) {
-    text(data.barcodeValue, xR0, botTop + 4, 3, { bold: true });
-    text('(штрихкод отрисует агент печати)', xR0, botTop + 8, 2, { color: GREY });
-  } else {
-    text('нет штрихкода', xR0, botTop + 5, 2.5, { color: GREY });
+    const r = Math.min(mm(cW) / barcode.width, mm(9) / barcode.height);
+    ctx.drawImage(barcode.image, mm(xR0), mm(y + 2.4), barcode.width * r, barcode.height * r);
+    text(data.barcodeValue, xR0, y + 2.4 + (barcode.height * r) / pxPerMm + 0.8, 2.3);
   }
+  cap('Дата / время изготовления', bx, y);
+  text(data.dateStr || '—', bx, y + 3.4, 3.8, { bold: true });
+  text(data.timeStr || '', bx, y + 8.4, 4.6, { bold: true });
 
-  caption('Дата / время изготовления', bx, botTop);
-  text(data.dateStr || '—', bx, botTop + 3.4, 3.8, { bold: true });
-  text(data.timeStr || '', bx, botTop + 8.4, 4.6, { bold: true });
-
-  /* нижняя полоса */
   const stripY = heightMm - stripH;
   dotted(xL0, stripY, xR1, stripY, brand);
-  drawFridge(ctx, mm, brand, xL0 + 3, stripY + stripH / 2 + 0.3, 3);
-  const stLines = wrap(data.storageText || '', widthMm - (xL0 + 8) - safeMm, font(2.4, false)).slice(0, 2);
-  drawLines(stLines, xL0 + 8, stripY + 1.6, 2.4, { lh: 1.15 });
-
-  ctx.restore();
-}
-
-function drawLogo(ctx, mm, color, FF, xMm, yMm, sizeMm) {
-  const x = mm(xMm);
-  const y = mm(yMm);
-  const r = mm(sizeMm) / 2;
-  ctx.save();
-  ctx.fillStyle = color;
+  ctx.fillStyle = brand;
   ctx.beginPath();
-  ctx.arc(x + r, y + r, r, Math.PI * 0.12, Math.PI * 0.88, true);
-  ctx.lineTo(x + r, y + mm(sizeMm) + mm(1.6));
-  ctx.closePath();
+  ctx.arc(mm(xL0 + 3), mm(stripY + stripH / 2 + 0.3), mm(3), 0, Math.PI * 2);
   ctx.fill();
-  ctx.strokeStyle = '#fff';
-  ctx.lineWidth = mm(0.62);
-  const cx = x + r;
-  const top = y + mm(2);
-  const bot = y + r + mm(2);
-  ctx.beginPath();
-  for (let i = -1; i <= 1; i++) {
-    ctx.moveTo(cx - mm(2.3) + i * mm(1), top);
-    ctx.lineTo(cx - mm(2.3) + i * mm(1), top + mm(2.4));
-  }
-  ctx.moveTo(cx - mm(2.3), top + mm(2.4));
-  ctx.lineTo(cx - mm(2.3), bot);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.ellipse(cx + mm(2.1), top + mm(1.5), mm(1.35), mm(1.9), 0, 0, Math.PI * 2);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.moveTo(cx + mm(2.1), top + mm(3.1));
-  ctx.lineTo(cx + mm(2.1), bot);
-  ctx.stroke();
-  ctx.restore();
-  ctx.fillStyle = '#111';
-  ctx.textBaseline = 'top';
-  ctx.font = `bold ${mm(5.6)}px ${FF}`;
-  ctx.fillText('gofood', x - mm(0.5), y + mm(sizeMm) + mm(3));
+  lines(
+    wrap(data.storageText || '', widthMm - (xL0 + 8) - safeMm, font(2.4, false)).slice(0, 2),
+    xL0 + 8,
+    stripY + 1.6,
+    2.4,
+    { lh: 1.15 }
+  );
 }
 
-function drawFridge(ctx, mm, color, cxMm, cyMm, rMm) {
-  const cx = mm(cxMm);
-  const cy = mm(cyMm);
-  const r = mm(rMm);
-  ctx.save();
-  ctx.fillStyle = color;
-  ctx.beginPath();
-  ctx.arc(cx, cy, r, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.strokeStyle = '#fff';
-  ctx.lineWidth = mm(0.45);
-  for (let i = 0; i < 3; i++) {
-    ctx.save();
-    ctx.translate(cx, cy);
-    ctx.rotate((i * Math.PI) / 3);
-    ctx.beginPath();
-    ctx.moveTo(-r * 0.6, 0);
-    ctx.lineTo(r * 0.6, 0);
-    ctx.stroke();
-    ctx.restore();
-  }
-  ctx.restore();
-}
-
-/** Калибровочная (тестовая) этикетка. */
+/** Калибровочная (тестовая) этикетка — без изменений. */
 export function drawTestLabel(ctx, opts) {
   const { widthMm, heightMm, pxPerMm, dpi, fontFamily = 'Arial', brand = '#F2661F', barcode = null } = opts;
   const mm = (v) => v * pxPerMm;

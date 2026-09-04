@@ -1,13 +1,13 @@
-import { renderLabel, type RenderParams } from './renderBrowser';
+import { renderLabelAsync, type RenderParams } from './renderBrowser';
 
 /**
  * Печать этикетки напрямую через браузер (без Print Agent).
  * Открывает окно с изображением этикетки в физическом размере и вызывает диалог печати.
  * Пользователь выбирает принтер, ставит «Поля: нет» и «Масштаб: 100%».
  */
-export function printViaBrowser(data: any, rp: RenderParams, copies = 1) {
+export async function printViaBrowser(data: any, rp: RenderParams, copies = 1) {
   const canvas = document.createElement('canvas');
-  renderLabel(canvas, data, rp);
+  await renderLabelAsync(canvas, data, rp);
   const url = canvas.toDataURL('image/png');
   const n = Math.max(1, Math.min(999, Math.round(copies)));
 

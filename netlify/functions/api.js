@@ -580,6 +580,7 @@ function renderParams(settings) {
     dpi: Number(settings['label.dpi']) || 300,
     printRotationDeg: Number(settings['label.printRotationDeg']) || 0,
     safeMm: Number(settings['label.safeMm']) || 3,
+    useTemplate: settings['label.useTemplate'] !== false,
     copiesMode: settings['print.copiesMode'] || 'pages',
     scale: settings['print.scale'] || 'noscale',
     printerName: settings['printer.name'] || '',
