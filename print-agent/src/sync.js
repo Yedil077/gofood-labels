@@ -48,13 +48,23 @@ export async function runSync(cfg, pushToCloud, settings, log = () => {}) {
   try {
     const products = await iiko.getProducts();
     log('info', `iiko: номенклатура — ${products.length} позиций`);
+    // диагностика: сколько позиций с заполненной пищевой ценностью
+    let withNutr = 0;
+    for (const p of products) {
+      const n = nutritionPer100g(p);
+      if (n.protein != null || n.fat != null || n.carbs != null || n.kcal != null) withNutr++;
+    }
+    log('info', `iiko: с пищевой ценностью на 100 г — ${withNutr}`);
+    if (products.length && withNutr === 0) {
+      log('warn', 'iiko: ни у одной позиции не считались поля ценности — пришлите один объект products в поддержку, подстрою имена полей');
+    }
 
-    const y = new Date().getFullYear();
-    const { assemblyCharts, preparedCharts } = await iiko.getAssemblyCharts(`${y}-01-01`, `${y}-12-31`);
-    log('info', `iiko: техкарты — ${assemblyCharts.length}, разложенные — ${preparedCharts.length}`);
+    const today = new Date().toISOString().slice(0, 10);
+    const { assemblyCharts, preparedCharts } = await iiko.getAssemblyCharts(today, today);
+    log('info', `iiko: техкарты на сегодня — ${assemblyCharts.length}, разложенные — ${preparedCharts.length}`);
 
     if (products.length && assemblyCharts.length === 0) {
-      log('warn', 'iiko: техкарты не вернулись — проверьте права API-пользователя и период');
+      log('warn', 'iiko: техкарты не вернулись — проверьте права API-пользователя (нужен доступ к номенклатуре и техкартам)');
     }
 
     const P = new Map(); // id -> product
@@ -72,7 +82,6 @@ export async function runSync(cfg, pushToCloud, settings, log = () => {}) {
     for (const c of assemblyCharts) push(groupA, String(chartProductId(c)), c);
     for (const c of preparedCharts) push(groupP, String(chartProductId(c)), c);
 
-    const today = new Date().toISOString().slice(0, 10);
     const items = [];
     let dishCount = 0;
     let compCount = 0;
