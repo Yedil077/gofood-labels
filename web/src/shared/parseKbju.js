@@ -46,7 +46,7 @@ export function parseKbjuRows(rows) {
       kcal: findCol(low, MATCH.kcal),
     };
     const hasKey = c.code >= 0 || c.artikul >= 0;
-    const hasVal = [c.protein, c.fat, c.carbs, c.kcal].filter((x) => x >= 0).length >= 2;
+    const hasVal = [c.protein, c.fat, c.carbs, c.kcal].some((x) => x >= 0);
     if (hasKey && hasVal) {
       headerRow = r;
       cols = c;
