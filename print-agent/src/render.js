@@ -23,17 +23,18 @@ try {
 }
 const FF = `${FONT_FAMILY}, Arial, sans-serif`;
 
-// Фон-макет (фирменная картинка). Грузим один раз.
-const TEMPLATE_PATH = path.join(__dirname, '..', 'assets', 'label-template.png');
-let templateImagePromise = null;
-function getTemplate() {
-  if (templateImagePromise === null) {
-    templateImagePromise = fs.existsSync(TEMPLATE_PATH)
-      ? loadImage(TEMPLATE_PATH).catch(() => null)
-      : Promise.resolve(null);
-  }
-  return templateImagePromise;
+// Картинки макета. Грузим один раз.
+const ASSETS = path.join(__dirname, '..', 'assets');
+function assetLoader(name) {
+  let p = null;
+  const file = path.join(ASSETS, name);
+  return () => {
+    if (p === null) p = fs.existsSync(file) ? loadImage(file).catch(() => null) : Promise.resolve(null);
+    return p;
+  };
 }
+const getTemplate = assetLoader('label-template.png');
+const getLogo = assetLoader('logo-gofood.png');
 
 async function barcodeImage(value, bcid) {
   if (!value) return null;
@@ -96,7 +97,11 @@ export async function renderJob(job) {
   } else {
     const data = job.label || {};
     const bc = await barcodeImage(data.barcodeValue, data.symbology || rp.symbology);
-    const templateImage = rp.useTemplate === false ? null : await getTemplate();
+    const useTemplate = rp.useTemplate === true;
+    const [templateImage, logoImage] = await Promise.all([
+      useTemplate ? getTemplate() : Promise.resolve(null),
+      getLogo(),
+    ]);
     drawLabel(ctx, {
       widthMm,
       heightMm,
@@ -104,7 +109,9 @@ export async function renderJob(job) {
       safeMm: Number(rp.safeMm) || 3,
       data,
       fontFamily: FF,
+      useTemplate,
       templateImage,
+      logoImage,
       barcode: bc,
     });
   }

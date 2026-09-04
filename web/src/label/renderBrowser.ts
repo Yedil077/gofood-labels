@@ -20,19 +20,19 @@ export interface RenderParams {
   useTemplate?: boolean;
 }
 
-// Фон-макет (фирменная картинка) — грузим один раз.
-let templatePromise: Promise<HTMLImageElement | null> | null = null;
-function loadTemplate(): Promise<HTMLImageElement | null> {
-  if (!templatePromise) {
-    templatePromise = new Promise((resolve) => {
-      const img = new Image();
-      img.onload = () => resolve(img);
-      img.onerror = () => resolve(null);
-      img.src = '/label-template.png';
-    });
-  }
-  return templatePromise;
+// Картинки — грузим один раз.
+function loadOnce(src: string): Promise<HTMLImageElement | null> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(null);
+    img.src = src;
+  });
 }
+let templatePromise: Promise<HTMLImageElement | null> | null = null;
+let logoPromise: Promise<HTMLImageElement | null> | null = null;
+const loadTemplate = () => (templatePromise ||= loadOnce('/label-template.png'));
+const loadLogo = () => (logoPromise ||= loadOnce('/logo-gofood.png'));
 
 export function makeBarcode(value: string, symbology: string) {
   if (!value || symbology === 'qrcode') return null;
@@ -59,14 +59,19 @@ export async function renderLabelAsync(canvas: HTMLCanvasElement, data: any, rp:
   canvas.height = Math.round(rp.heightMm * pxPerMm);
   const ctx = canvas.getContext('2d')!;
   const barcode = makeBarcode(data.barcodeValue, data.symbology || rp.symbology);
-  const templateImage = rp.useTemplate === false ? null : await loadTemplate();
+  const [templateImage, logoImage] = await Promise.all([
+    rp.useTemplate ? loadTemplate() : Promise.resolve(null),
+    loadLogo(),
+  ]);
   drawLabel(ctx, {
     widthMm: rp.widthMm,
     heightMm: rp.heightMm,
     pxPerMm,
     safeMm: rp.safeMm,
     data,
+    useTemplate: !!rp.useTemplate,
     templateImage,
+    logoImage,
     barcode,
   });
 }

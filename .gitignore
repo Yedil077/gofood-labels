@@ -11,3 +11,4 @@ print-agent/fonts/*.otf
 
 .DS_Store
 _preview/
+_send/
