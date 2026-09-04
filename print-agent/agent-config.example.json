@@ -9,7 +9,8 @@
 
   "iiko": {
     "host": "greencity.iiko.it",
-    "login": "логин пользователя iiko API",
-    "password": "пароль пользователя iiko API"
+    "login": "yedil",
+    "apiPassword": "пароль внешнего API из карточки сотрудника iikoOffice",
+    "password": "обычный пароль сотрудника (необязательно, запасной вариант)"
   }
 }

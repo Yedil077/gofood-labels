@@ -9,11 +9,12 @@ const sha1 = (s) => crypto.createHash('sha1').update(String(s), 'utf8').digest('
  * У iiko жёсткий лимит одновременных API-сессий — всегда делаем logout.
  */
 export class Iiko {
-  constructor({ host, login, password, base }) {
+  constructor({ host, login, password, apiPassword, base }) {
     this.host = String(host || '').replace(/^https?:\/\//, '').replace(/\/+$/, '');
     this.base = base || `https://${this.host}/resto/api`;
     this.login = login;
-    this.password = password;
+    // «Пароль внешнего API» приоритетнее обычного; пробуем оба + без хэша
+    this.passwords = [apiPassword, password].filter((x) => x != null && x !== '');
     this.key = null;
   }
 
@@ -35,14 +36,26 @@ export class Iiko {
 
   async auth() {
     const p = encodeURIComponent(this.login);
-    try {
-      this.key = (await this._text(`${this.base}/auth?login=${p}&pass=${sha1(this.password)}`)).trim();
-    } catch (e) {
-      // некоторые старые сборки принимают пароль как есть
-      this.key = (await this._text(`${this.base}/auth?login=${p}&pass=${encodeURIComponent(this.password)}`)).trim();
+    if (!this.passwords.length) throw new Error('iiko: не задан пароль (password или apiPassword)');
+    const attempts = [];
+    for (const pw of this.passwords) {
+      attempts.push(`pass=${sha1(pw)}`); // штатный вариант — SHA1
+      attempts.push(`pass=${encodeURIComponent(pw)}`); // старые сборки — как есть
     }
-    if (!this.key || this.key.length < 8) throw new Error('iiko: пустой токен авторизации');
-    return this.key;
+    let lastErr;
+    for (const a of attempts) {
+      try {
+        const key = (await this._text(`${this.base}/auth?login=${p}&${a}`)).trim();
+        if (key && key.length >= 8 && !/[<>]/.test(key)) {
+          this.key = key;
+          return key;
+        }
+        lastErr = new Error('iiko: неожиданный ответ авторизации: ' + key.slice(0, 80));
+      } catch (e) {
+        lastErr = e;
+      }
+    }
+    throw lastErr || new Error('iiko: авторизация не удалась');
   }
 
   async logout() {
