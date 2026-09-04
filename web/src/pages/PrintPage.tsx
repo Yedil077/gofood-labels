@@ -11,6 +11,7 @@ import { calculateLabelDateTime, localKey } from '../shared/labelDateTime.js';
 import { normalizeDishForLabel } from '../shared/normalize.js';
 // @ts-ignore
 import { groupOf, buildTree } from '../shared/categories.js';
+import { printViaBrowser } from '../label/printBrowser';
 import type { Dish, Settings } from '../types';
 
 type View = 'groups' | 'dishes' | 'dish';
@@ -270,6 +271,21 @@ export default function PrintPage() {
               <button className="btn primary big" disabled={busy} onClick={() => doPrint(false)}>
                 {busy ? <span className="spinner" /> : '🖨'} ПЕЧАТЬ{qty > 1 ? ` · ${qty} шт.` : ''}
               </button>
+              <button
+                className="btn big"
+                style={{ marginTop: 8 }}
+                onClick={() =>
+                  labelData &&
+                  printViaBrowser(labelData, rp as any, qty)
+                }
+                title="Открыть диалог печати браузера (без Print Agent)"
+              >
+                🖨 Печать через браузер
+              </button>
+              <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+                «ПЕЧАТЬ» — через агент на ПК с принтером. «Через браузер» — сразу диалог печати
+                (выберите принтер, поля «Нет», масштаб 100%).
+              </div>
             </div>
 
             {result && (

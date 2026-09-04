@@ -10,6 +10,29 @@ import { runSync } from './sync.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..');
 
+// --- дублируем консоль в файл out/agent.log (для скрытого автозапуска) ---
+try {
+  const logDir = path.join(ROOT, 'out');
+  fs.mkdirSync(logDir, { recursive: true });
+  const logFile = path.join(logDir, 'agent.log');
+  try {
+    if (fs.existsSync(logFile) && fs.statSync(logFile).size > 3 * 1024 * 1024) fs.rmSync(logFile);
+  } catch {}
+  const stream = fs.createWriteStream(logFile, { flags: 'a' });
+  const stamp = () => new Date().toISOString().replace('T', ' ').slice(0, 19);
+  for (const m of ['log', 'warn', 'error']) {
+    const orig = console[m].bind(console);
+    console[m] = (...a) => {
+      orig(...a);
+      try {
+        stream.write(`[${stamp()}] ${a.map((x) => (typeof x === 'string' ? x : JSON.stringify(x))).join(' ')}\n`);
+      } catch {}
+    };
+  }
+} catch {
+  /* no-op */
+}
+
 function loadConfig() {
   const p = process.env.AGENT_CONFIG || path.join(ROOT, 'agent-config.json');
   if (!fs.existsSync(p)) {

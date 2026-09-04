@@ -47,8 +47,13 @@ export async function printPdf(pdf, opts = {}) {
   const o = { scale: opts.scale || 'noscale', silent: true };
   if (opts.printer) o.printer = opts.printer;
   if (opts.copiesMode === 'driver' && opts.copies > 1) o.copies = Number(opts.copies);
+
+  const timeoutMs = Number(opts.timeoutMs) || 60000;
   try {
-    await p.print(file, o);
+    await Promise.race([
+      p.print(file, o),
+      new Promise((_, rej) => setTimeout(() => rej(new Error(`таймаут печати ${timeoutMs / 1000}с`)), timeoutMs)),
+    ]);
     return { ok: true, via: 'pdf-to-printer', file, printer: opts.printer || '(default)' };
   } catch (e) {
     return { ok: false, via: 'pdf-to-printer', file, error: String(e?.message || e) };
