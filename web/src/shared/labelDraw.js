@@ -142,16 +142,13 @@ function drawVector(ctx, opts) {
   const xR1 = widthMm - safeMm;
   const rW = xR1 - xR0;
   const stripH = 8.5;
-  const contentBottom = heightMm - stripH - 1;
+  const stripY = heightMm - stripH;
 
-  // рамка-ориентир + разделитель
+  // рамка-ориентир (вертикальный разделитель колонок рисуется ниже —
+  // строго от первой пунктирной линии до нижней плашки)
   ctx.strokeStyle = LINE;
   ctx.lineWidth = Math.max(1, mm(0.3));
   ctx.strokeRect(mm(0.6), mm(0.6), mm(widthMm) - mm(1.2), mm(heightMm) - mm(1.2));
-  ctx.beginPath();
-  ctx.moveTo(mm(dividerX), mm(safeMm + 3));
-  ctx.lineTo(mm(dividerX), mm(contentBottom));
-  ctx.stroke();
 
   /* --- логотип --- */
   const logoBoxW = xLw;
@@ -259,6 +256,15 @@ function drawVector(ctx, opts) {
   }
   y = Math.max(y, safeMm + 5.2);
   dotted(xR0, y, xR1, y, brand);
+  // вертикальный разделитель колонок — от этой линии до нижней плашки
+  ctx.save();
+  ctx.strokeStyle = LINE;
+  ctx.lineWidth = Math.max(1, mm(0.3));
+  ctx.beginPath();
+  ctx.moveTo(mm(dividerX), mm(y));
+  ctx.lineTo(mm(dividerX), mm(stripY));
+  ctx.stroke();
+  ctx.restore();
   y += 1.6;
 
   const cW = (rW - 3) / 2;
@@ -336,16 +342,17 @@ function drawVector(ctx, opts) {
   text(data.timeStr || '', dx, botTop + 7.4, 4.1, { bold: true });
 
   /* --- нижняя полоса --- */
-  const stripY = heightMm - stripH;
   dotted(xL0, stripY, xR1, stripY, brand);
-  drawFridge(ctx, mm, brand, xL0 + 3, stripY + stripH / 2 + 0.3, 3);
-  lines(
-    wrap(data.storageText || '', widthMm - (xL0 + 8) - safeMm, font(2.4, false)).slice(0, 2),
-    xL0 + 8,
-    stripY + 1.6,
-    2.4,
-    { lh: 1.15 }
-  );
+  const fridgeCy = stripY + stripH / 2;
+  drawFridge(ctx, mm, brand, xL0 + 3, fridgeCy, 2.9);
+  const stEls = wrap(
+    data.storageText || '',
+    widthMm - (xL0 + 8) - safeMm,
+    font(2.4, false)
+  ).slice(0, 2);
+  const stLh = 2.4 * K * 1.15;
+  const stTop = fridgeCy - (stEls.length * stLh) / 2 + 0.15; // по центру значка
+  lines(stEls, xL0 + 8, stTop, 2.4, { lh: 1.15 });
 }
 
 function drawFridge(ctx, mm, color, cxMm, cyMm, rMm) {
