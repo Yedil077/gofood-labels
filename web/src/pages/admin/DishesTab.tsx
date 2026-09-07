@@ -230,7 +230,7 @@ function EditModal({
 
             <label className="fld">
               Тип питания{' '}
-              <span className="muted">(значок на этикетке; авто — по категории/названию: {dish.diet_type_auto === 'pp' ? 'ПП' : 'Классический'})</span>
+              <span className="muted">(показывается на этикетке в блоке «Категория»; авто — по категории/названию: {dish.diet_type_auto === 'pp' ? 'ПП' : 'Классический'})</span>
             </label>
             <select value={f.diet_type} onChange={(e) => set('diet_type', e.target.value)}>
               <option value="">авто ({dish.diet_type_auto === 'pp' ? 'ПП' : 'Классический'})</option>

@@ -341,7 +341,7 @@ export default function SettingsTab() {
             checked={s['label.showDietType'] !== false}
             onChange={(e) => set('label.showDietType', e.target.checked)}
           />
-          Показывать значок «ПП» / «Классический» рядом со слоганом
+          В блоке «Категория» на этикетке показывать «ПП» / «Классический» вместо категории iiko
         </label>
 
         <label className="fld">Условия хранения</label>
