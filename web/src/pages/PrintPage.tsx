@@ -122,6 +122,21 @@ export default function PrintPage() {
     }
   }
 
+  async function setDiet(v: 'pp' | 'classic' | null) {
+    if (!dish) return;
+    try {
+      const r: any = await api.setDietType(dish.id, v);
+      if (r.dish) {
+        setDish(r.dish);
+        setDishes((list) => list.map((d) => (d.id === r.dish.id ? { ...d, ...r.dish } : d)));
+      } else {
+        setResult({ kind: 'err', text: r.error || 'Не удалось изменить тип питания' });
+      }
+    } catch (e: any) {
+      setResult({ kind: 'err', text: String(e?.message || e) });
+    }
+  }
+
   function watchJob(jobId: number) {
     if (pollRef.current) clearInterval(pollRef.current);
     let tries = 0;
@@ -263,6 +278,40 @@ export default function PrintPage() {
             <div style={{ marginTop: 14 }}>
               <WarningsPanel warnings={dish.warnings} />
             </div>
+
+            {(() => {
+              const eff = dish.diet_type || dish.diet_type_auto;
+              const isAuto = !dish.diet_type;
+              return (
+                <div style={{ marginTop: 14 }}>
+                  <label className="fld">Тип питания на этикетке</label>
+                  <div className="row" style={{ gap: 8 }}>
+                    <button
+                      className={'btn' + (eff === 'pp' ? ' primary' : '')}
+                      onClick={() => setDiet('pp')}
+                    >
+                      ПП
+                    </button>
+                    <button
+                      className={'btn' + (eff === 'classic' ? ' primary' : '')}
+                      onClick={() => setDiet('classic')}
+                    >
+                      Классический
+                    </button>
+                    {!isAuto && (
+                      <button className="btn" onClick={() => setDiet(null)} title="Вернуть автоопределение">
+                        авто
+                      </button>
+                    )}
+                  </div>
+                  <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+                    {isAuto
+                      ? `Программа определила: ${eff === 'pp' ? 'ПП' : 'Классический'}. Если неверно — нажмите нужную кнопку.`
+                      : 'Задано вручную.'}
+                  </div>
+                </div>
+              );
+            })()}
 
             <label className="fld">Количество</label>
             <QuantityStepper value={qty} onChange={setQty} />

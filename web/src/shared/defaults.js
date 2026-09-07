@@ -43,6 +43,7 @@ export const DEFAULTS = {
   'brand.tagline': 'Больше энергии — больше возможностей',
   'brand.logo': 'gofood',
   'brand.fontScale': 1.0,
+  'label.showDietType': true, // показывать значок «ПП» / «Классический» у слогана
   'storage.text': 'Хранить в холодильнике при температуре от +2 °C до +6 °C.',
 
   // Дата/время
@@ -65,6 +66,7 @@ export const DISH_EDITABLE = [
   'category_source',
   'composition',
   'composition_source',
+  'diet_type',
   'kcal',
   'protein',
   'fat',

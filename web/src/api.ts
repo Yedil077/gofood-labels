@@ -27,6 +27,11 @@ export const api = {
   getDish: (id: number) => req<{ dish: Dish }>(`/dishes/${id}`),
   updateDish: (id: number, patch: Partial<Dish>) =>
     req<{ dish: Dish }>(`/dishes/${id}`, { method: 'PUT', body: JSON.stringify(patch) }),
+  setDietType: (id: number, value: 'pp' | 'classic' | null) =>
+    req<{ dish: Dish }>(`/dishes/${id}/diet-type`, {
+      method: 'PUT',
+      body: JSON.stringify({ value }),
+    }),
   categories: () => req<{ categories: string[] }>('/dishes/categories'),
 
   labelDateTime: (local?: string) =>

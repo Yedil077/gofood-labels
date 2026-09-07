@@ -78,6 +78,7 @@ export default function SettingsTab() {
       'brand.tagline': s!['brand.tagline'],
       'brand.logo': s!['brand.logo'] || 'gofood',
       'brand.fontScale': Number(s!['brand.fontScale']) || 1,
+      'label.showDietType': s!['label.showDietType'] !== false,
       'storage.text': s!['storage.text'],
       datetime: { ...dtClean, controlExamples },
     };
@@ -334,6 +335,15 @@ export default function SettingsTab() {
             <input type="number" step="0.05" value={s['brand.fontScale']} onChange={(e) => set('brand.fontScale', e.target.value)} />
           </div>
         </div>
+        <label className="row" style={{ gap: 8, marginTop: 12 }}>
+          <input
+            type="checkbox"
+            checked={s['label.showDietType'] !== false}
+            onChange={(e) => set('label.showDietType', e.target.checked)}
+          />
+          Показывать значок «ПП» / «Классический» рядом со слоганом
+        </label>
+
         <label className="fld">Условия хранения</label>
         <textarea value={s['storage.text']} onChange={(e) => set('storage.text', e.target.value)} />
       </div>

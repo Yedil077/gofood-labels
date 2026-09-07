@@ -23,6 +23,7 @@ import {
   normalizeDishForLabel,
   WARNING_TEXT,
 } from '../../web/src/shared/normalize.js';
+import { detectDietType } from '../../web/src/shared/dietType.js';
 
 
 let ADMIN_TOKEN = '';
@@ -69,6 +70,8 @@ function dishOut(d, settings) {
     active: !!d.active,
     barcodeValue: bc.value,
     barcodeSourceEffective: bc.source,
+    diet_type: d.diet_type === 'pp' || d.diet_type === 'classic' ? d.diet_type : null,
+    diet_type_auto: detectDietType(d),
     warnings: warningObjects(d, settings),
   };
 }
@@ -167,6 +170,22 @@ async function route(req) {
         if (idx < 0) return json({ error: 'Блюдо не найдено' }, 404);
         return json({ dish: dishOut(dishes[idx], settings) });
       }
+      // Тип питания (ПП / Классический) — правит менеджер прямо с экрана печати,
+      // отдельный маршрут без токена администратора: это лишь метка на этикетке.
+      if (seg.length === 3 && seg[2] === 'diet-type' && method === 'PUT') {
+        if (idx < 0) return json({ error: 'Блюдо не найдено' }, 404);
+        const d = dishes[idx];
+        const v = body.value;
+        d.diet_type = v === 'pp' || v === 'classic' ? v : null;
+        d.updated_at = new Date().toISOString();
+        await setJSON('dishes', dishes);
+        await logEvent(
+          'info',
+          'dishes',
+          `Тип питания #${d.id} «${d.name}» → ${d.diet_type || 'авто'}`
+        );
+        return json({ dish: dishOut(d, settings) });
+      }
       if (seg.length === 2 && method === 'PUT') {
         if (!isAdmin(req)) return denyAdmin();
         if (idx < 0) return json({ error: 'Блюдо не найдено' }, 404);
@@ -176,6 +195,8 @@ async function route(req) {
           if (key === 'active') d.active = body[key] ? 1 : 0;
           else if (['kcal', 'protein', 'fat', 'carbs', 'shelf_life_hours'].includes(key))
             d[key] = toNum(body[key]);
+          else if (key === 'diet_type')
+            d.diet_type = body[key] === 'pp' || body[key] === 'classic' ? body[key] : null;
           else d[key] = body[key];
         }
         if ('category' in body && !('category_source' in body)) d.category_source = 'manual';

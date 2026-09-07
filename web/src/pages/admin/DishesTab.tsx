@@ -140,6 +140,7 @@ function EditModal({
     shelf_life_hours: dish.shelf_life_hours ?? '',
     storage_text: dish.storage_text || '',
     barcode_source: dish.barcode_source || '',
+    diet_type: dish.diet_type || '',
     active: dish.active,
   });
   const set = (k: string, v: any) => setF((s) => ({ ...s, [k]: v }));
@@ -156,6 +157,7 @@ function EditModal({
       carbs: f.carbs === '' ? null : Number(f.carbs),
       kcal: f.kcal === '' ? null : Number(f.kcal),
       barcode_source: f.barcode_source || null,
+      diet_type: f.diet_type || null,
     };
     const data = normalizeDishForLabel(merged, settings, dt);
     renderLabel(canvasRef.current, data, {
@@ -225,6 +227,16 @@ function EditModal({
                 </select>
               </div>
             </div>
+
+            <label className="fld">
+              Тип питания{' '}
+              <span className="muted">(значок на этикетке; авто — по категории/названию: {dish.diet_type_auto === 'pp' ? 'ПП' : 'Классический'})</span>
+            </label>
+            <select value={f.diet_type} onChange={(e) => set('diet_type', e.target.value)}>
+              <option value="">авто ({dish.diet_type_auto === 'pp' ? 'ПП' : 'Классический'})</option>
+              <option value="pp">ПП</option>
+              <option value="classic">Классический</option>
+            </select>
 
             <label className="fld">Условия хранения (переопределение)</label>
             <input

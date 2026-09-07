@@ -25,6 +25,8 @@ export interface Dish {
   shelf_life_hours: number | null;
   storage_text: string | null;
   barcode_source: string | null;
+  diet_type: 'pp' | 'classic' | null;
+  diet_type_auto: 'pp' | 'classic';
   active: boolean;
   barcodeValue: string;
   barcodeSourceEffective: string;

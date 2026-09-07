@@ -1,6 +1,7 @@
 /** Общая логика: источник штрихкода, предупреждения, нормализация блюда для этикетки. */
 import { ean13FromArtikul } from './barcode.js';
 import { resolveBrand } from './brand.js';
+import { resolveDietType, dietTypeLabel } from './dietType.js';
 
 export const WARNING_TEXT = {
   composition: 'Не заполнен состав',
@@ -65,5 +66,8 @@ export function normalizeDishForLabel(dish, settings, dt) {
     approximateTime: !!dt?.approximate,
     brand: resolveBrand(settings), // { name, logo, tagline, color }
     fontScale: Number(settings['brand.fontScale']) || 1,
+    dietType: resolveDietType(dish), // 'pp' | 'classic'
+    dietTypeLabel: dietTypeLabel(dish), // 'ПП' | 'Классический'
+    showDietType: settings['label.showDietType'] !== false,
   };
 }

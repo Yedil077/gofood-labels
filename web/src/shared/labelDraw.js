@@ -113,6 +113,16 @@ function drawVector(ctx, opts) {
     }
     return { lines: L, size: sz };
   };
+  const roundRect = (x, y, w, h, r) => {
+    const rr = Math.min(r, w / 2, h / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + rr, y);
+    ctx.arcTo(x + w, y, x + w, y + h, rr);
+    ctx.arcTo(x + w, y + h, x, y + h, rr);
+    ctx.arcTo(x, y + h, x, y, rr);
+    ctx.arcTo(x, y, x + w, y, rr);
+    ctx.closePath();
+  };
   const lines = (L, x, y, sz, o = {}) => {
     ctx.fillStyle = o.color || INK;
     ctx.font = font(sz, o.bold);
@@ -185,13 +195,47 @@ function drawVector(ctx, opts) {
 
   /* --- правая колонка --- */
   let y = safeMm;
+
+  // значок «ПП» / «Классический» у слогана.
+  // Считаем его размер заранее; если слоган помещается рядом — рисуем в одну
+  // строку, иначе значок уходит на отдельную строчку под слоганом.
+  const badge = (() => {
+    if (!(data.showDietType && data.dietTypeLabel)) return null;
+    const isPP = data.dietType === 'pp';
+    const fs = 2.3;
+    ctx.font = font(fs, true);
+    const twMm = ctx.measureText(data.dietTypeLabel).width / pxPerMm;
+    const padX = 1.6;
+    return { isPP, fs, padX, w: twMm + padX * 2, h: 4.6 };
+  })();
+  const drawBadge = (x0, y0) => {
+    ctx.save();
+    roundRect(mm(x0), mm(y0), mm(badge.w), mm(badge.h), mm(1.3));
+    if (badge.isPP) {
+      ctx.fillStyle = '#5AAA2E';
+      ctx.fill();
+    } else {
+      ctx.strokeStyle = GREY;
+      ctx.lineWidth = Math.max(1, mm(0.3));
+      ctx.stroke();
+    }
+    ctx.fillStyle = badge.isPP ? '#ffffff' : GREY;
+    ctx.font = font(badge.fs, true);
+    ctx.fillText(data.dietTypeLabel, mm(x0 + badge.padX), mm(y0 + (badge.h - badge.fs * K) / 2));
+    ctx.restore();
+  };
+
   if (data.brand?.tagline) {
-    const t = fit(data.brand.tagline, rW - 6, 1, 2.7, 1.9, true);
+    // проверяем, влезает ли слоган рядом со значком в одну строку
+    ctx.font = font(2.7, true);
+    const fullTwMm = ctx.measureText(data.brand.tagline).width / pxPerMm + 4; // + листок
+    const inline = badge && fullTwMm + badge.w + 3 <= rW;
+    const availW = inline ? rW - badge.w - 3 : rW;
+    const t = fit(data.brand.tagline, availW - 4, 1, 2.7, 1.9, true);
     ctx.font = font(t.size, true);
-    const tw = ctx.measureText(t.lines[0]).width; // px
-    const twMm = tw / pxPerMm;
-    const groupW = twMm + 4; // листок + отступ
-    const startX = xR0 + Math.max(0, (rW - groupW) / 2); // по центру колонки
+    const twMm = ctx.measureText(t.lines[0]).width / pxPerMm;
+    const groupW = twMm + 4;
+    const startX = xR0 + Math.max(0, (availW - groupW) / 2);
     ctx.save();
     ctx.fillStyle = brand;
     ctx.beginPath();
@@ -199,10 +243,21 @@ function drawVector(ctx, opts) {
     ctx.fill();
     ctx.restore();
     text(t.lines[0], startX + 3.4, y, t.size, { bold: true });
+    if (badge && inline) drawBadge(xR1 - badge.w, y - 0.3);
     y += Math.max(3.2, t.size * K + 1.2);
+    if (badge && !inline) {
+      drawBadge(xR1 - badge.w, y - 0.2);
+      y += badge.h + 0.6;
+    }
   } else {
-    y += 1;
+    if (badge) {
+      drawBadge(xR1 - badge.w, y - 0.3);
+      y += badge.h + 0.6;
+    } else {
+      y += 1;
+    }
   }
+  y = Math.max(y, safeMm + 5.2);
   dotted(xR0, y, xR1, y, brand);
   y += 1.6;
 
