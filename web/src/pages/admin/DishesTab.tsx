@@ -61,7 +61,8 @@ export default function DishesTab() {
       );
       return; // модалку не закрываем — данные в форме остаются
     }
-    setEdit(r.dish);
+    // успех: закрываем окно, обновляем список (строка станет «полно»)
+    close();
     load();
   }
   function close() {
