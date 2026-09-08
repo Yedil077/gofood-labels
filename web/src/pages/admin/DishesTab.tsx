@@ -15,6 +15,7 @@ export default function DishesTab() {
   const [showAll, setShowAll] = useState(true);
   const [cats, setCats] = useState<string[]>([]);
   const [edit, setEdit] = useState<Dish | null>(null);
+  const [saveErr, setSaveErr] = useState('');
   const [params, setParams] = useSearchParams();
 
   function load() {
@@ -50,11 +51,12 @@ export default function DishesTab() {
 
   async function save(patch: Partial<Dish>) {
     if (!edit) return;
+    setSaveErr('');
     const r: any = await api.updateDish(edit.id, patch);
     if (r?._status >= 400 || !r?.dish) {
-      alert(
+      setSaveErr(
         r?._status === 401 || r?.error === 'Требуется токен администратора'
-          ? 'Изменения НЕ сохранены: не введён пароль администратора.\n\nОткройте Настройки → «Доступ администратора» и введите пароль, затем сохраните снова.'
+          ? 'НЕ сохранено: неверный пароль администратора. Настройки → «Доступ администратора» → введите пароль (должно быть «✓ пароль принят»), потом сохраните снова.'
           : 'Не удалось сохранить: ' + (r?.error || 'ошибка ' + (r?._status || '?'))
       );
       return; // модалку не закрываем — данные в форме остаются
@@ -64,6 +66,7 @@ export default function DishesTab() {
   }
   function close() {
     setEdit(null);
+    setSaveErr('');
     params.delete('edit');
     setParams(params, { replace: true });
   }
@@ -119,7 +122,9 @@ export default function DishesTab() {
         </tbody>
       </table>
 
-      {edit && settings && <EditModal dish={edit} settings={settings} cats={cats} onSave={save} onClose={close} />}
+      {edit && settings && (
+        <EditModal dish={edit} settings={settings} cats={cats} saveErr={saveErr} onSave={save} onClose={close} />
+      )}
     </div>
   );
 }
@@ -128,12 +133,14 @@ function EditModal({
   dish,
   settings,
   cats,
+  saveErr,
   onSave,
   onClose,
 }: {
   dish: Dish;
   settings: Settings;
   cats: string[];
+  saveErr: string;
   onSave: (p: Partial<Dish>) => void;
   onClose: () => void;
 }) {
@@ -266,6 +273,15 @@ function EditModal({
               <input type="checkbox" checked={f.active} onChange={(e) => set('active', e.target.checked)} />
               Блюдо доступно для печати
             </label>
+
+            {saveErr && (
+              <div
+                className="banner err"
+                style={{ marginTop: 14, background: '#fdecea', border: '1px solid #f0b3ac', color: '#a02a1c', padding: 10, borderRadius: 6, fontSize: 13 }}
+              >
+                {saveErr}
+              </div>
+            )}
 
             <div className="row" style={{ marginTop: 16, justifyContent: 'flex-end' }}>
               <button className="btn" onClick={guardedClose}>Закрыть</button>
