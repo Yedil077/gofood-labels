@@ -24,10 +24,13 @@ import {
   WARNING_TEXT,
 } from '../../web/src/shared/normalize.js';
 import { detectDietType } from '../../web/src/shared/dietType.js';
+import { Iiko } from '../../web/src/shared/iiko.js';
+import { buildNomenclatureItems } from '../../web/src/shared/iikoSync.js';
 
 
 let ADMIN_TOKEN = '';
 let AGENT_TOKEN = '';
+let IIKO_CFG = null; // { host, login, password } из секретов Cloudflare
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -61,6 +64,110 @@ async function loadSettings() {
 }
 async function loadDishes() {
   return (await getJSON('dishes', [])) || [];
+}
+
+/** Мерж номенклатуры (состав/КБЖУ) в blob `dishes`. Один код для агента и облачного синка. */
+async function mergeNomenclature({ items, stats = null, message = null }) {
+  items = Array.isArray(items) ? items : [];
+  const s0 = (await getJSON('settings', {})) || {};
+  const settings = mergeSettings(s0);
+  const allowNew = settings['sync.allowNewDishes'] === true;
+  const dishes = await loadDishes();
+  const byArt = new Map(dishes.filter((d) => d.artikul).map((d) => [String(d.artikul), d]));
+  const byCode = new Map(dishes.filter((d) => d.code).map((d) => [String(d.code), d]));
+  const byName = new Map(dishes.map((d) => [normName(d.name), d]));
+  let nextId = dishes.reduce((m, d) => Math.max(m, d.id || 0), 0) + 1;
+  const now = new Date().toISOString();
+
+  let matched = 0;
+  let compSet = 0;
+  let nutrSet = 0;
+  let nutrPartial = 0;
+  let added = 0;
+
+  for (const it of items) {
+    const key = String(it.num || '').trim();
+    let d =
+      (key && byArt.get(key)) ||
+      (it.code && byCode.get(String(it.code))) ||
+      (it.name && byName.get(normName(it.name))) ||
+      null;
+
+    if (!d) {
+      if (!allowNew || !it.name) continue;
+      d = {
+        id: nextId++,
+        name: it.name,
+        artikul: key || null,
+        code: it.code ? String(it.code) : null,
+        type: 'Блюдо',
+        category: null,
+        category_source: 'none',
+        composition: null,
+        composition_source: null,
+        kcal: null,
+        protein: null,
+        fat: null,
+        carbs: null,
+        nutrition_source: null,
+        barcode_source: null,
+        active: 1,
+        created_at: now,
+        updated_at: now,
+      };
+      dishes.push(d);
+      if (d.artikul) byArt.set(String(d.artikul), d);
+      added++;
+    }
+    matched++;
+    d.iiko_id = it.iikoId || d.iiko_id || null;
+    d.iiko_synced_at = now;
+
+    if (it.composition && d.composition_source !== 'manual') {
+      if (d.composition !== it.composition) {
+        d.composition = it.composition;
+        d.composition_source = 'iiko';
+        compSet++;
+      }
+    }
+
+    const hasFull = it.protein != null && it.fat != null && it.carbs != null && it.kcal != null;
+    const hasAny = it.protein != null || it.fat != null || it.carbs != null || it.kcal != null;
+    const nutrLocked = d.nutrition_source === 'manual' || d.nutrition_source === 'import';
+    if (hasAny && !nutrLocked) {
+      d.protein = num1(it.protein);
+      d.fat = num1(it.fat);
+      d.carbs = num1(it.carbs);
+      d.kcal = it.kcal == null ? null : Math.round(Number(it.kcal));
+      d.nutrition_source = hasFull ? 'iiko-computed' : 'iiko-partial';
+      if (hasFull) nutrSet++;
+      else nutrPartial++;
+    }
+    d.updated_at = now;
+  }
+
+  await setJSON('dishes', dishes);
+  const result = {
+    ok: true,
+    at: now,
+    received: items.length,
+    matched,
+    added,
+    compositionSet: compSet,
+    nutritionSet: nutrSet,
+    nutritionPartial: nutrPartial,
+    message: message || null,
+    agentStats: stats || null,
+  };
+  s0['sync.lastRunAt'] = now;
+  s0['sync.lastResult'] = result;
+  await setJSON('settings', s0);
+  await logEvent(
+    'info',
+    'sync',
+    `iiko: получено ${items.length}, сопоставлено ${matched}, состав +${compSet}, КБЖУ +${nutrSet} (частично ${nutrPartial}), новых ${added}`
+  );
+  return result;
 }
 
 function dishOut(d, settings) {
@@ -434,113 +541,42 @@ async function route(req) {
       }
       if (seg[1] === 'run' && method === 'POST') {
         if (!isAdmin(req)) return denyAdmin();
+        // Облачный синк: Cloudflare сам ходит в iiko (креды — в секретах).
+        if (IIKO_CFG && IIKO_CFG.host && IIKO_CFG.login) {
+          const settings = await loadSettings();
+          const iiko = new Iiko(IIKO_CFG);
+          try {
+            await iiko.auth();
+            const { items, stats } = await buildNomenclatureItems(iiko, settings);
+            const result = await mergeNomenclature({ items, stats, message: `iiko ${iiko.host} (облако)` });
+            const diag =
+              url.searchParams.get('diag') === '1'
+                ? {
+                    withComp: items.filter((i) => i.composition).slice(0, 4),
+                    firstItems: items.slice(0, 4),
+                  }
+                : undefined;
+            return json({ ok: true, mode: 'cloud', ...result, diag });
+          } catch (e) {
+            await logEvent('error', 'sync', 'Облачный синк iiko: ' + String(e?.message || e));
+            return json({ ok: false, error: 'Синхронизация iiko не удалась: ' + String(e?.message || e) }, 502);
+          } finally {
+            await iiko.logout();
+          }
+        }
+        // Фолбэк: старый режим — задание для Print Agent.
         const job = await enqueueJob({ kind: 'sync', user: body.user || 'admin', dish: { name: '[СИНХРОНИЗАЦИЯ iiko]' } });
-        await logEvent('info', 'sync', `Запрошена синхронизация, задание #${job.id}`);
-        return json({ ok: true, jobId: job.id });
+        await logEvent('info', 'sync', `Запрошена синхронизация (агент), задание #${job.id}`);
+        return json({ ok: true, mode: 'agent', jobId: job.id });
       }
-      // агент присылает вычисленные состав + КБЖУ
+      // агент присылает готовые состав + КБЖУ
       if (seg[1] === 'nomenclature' && method === 'POST') {
         if (!isAgent(req)) return denyAgent();
-        const items = Array.isArray(body.items) ? body.items : [];
-        const s0 = (await getJSON('settings', {})) || {};
-        const settings = mergeSettings(s0);
-        const allowNew = settings['sync.allowNewDishes'] === true;
-        const dishes = await loadDishes();
-        const byArt = new Map(dishes.filter((d) => d.artikul).map((d) => [String(d.artikul), d]));
-        const byCode = new Map(dishes.filter((d) => d.code).map((d) => [String(d.code), d]));
-        const byName = new Map(dishes.map((d) => [normName(d.name), d]));
-        let nextId = dishes.reduce((m, d) => Math.max(m, d.id || 0), 0) + 1;
-        const now = new Date().toISOString();
-
-        let matched = 0;
-        let compSet = 0;
-        let nutrSet = 0;
-        let nutrPartial = 0;
-        let added = 0;
-
-        for (const it of items) {
-          const key = String(it.num || '').trim();
-          let d =
-            (key && byArt.get(key)) ||
-            (it.code && byCode.get(String(it.code))) ||
-            (it.name && byName.get(normName(it.name))) ||
-            null;
-
-          if (!d) {
-            if (!allowNew || !it.name) continue;
-            d = {
-              id: nextId++,
-              name: it.name,
-              artikul: key || null,
-              code: it.code ? String(it.code) : null,
-              type: 'Блюдо',
-              category: null,
-              category_source: 'none',
-              composition: null,
-              composition_source: null,
-              kcal: null,
-              protein: null,
-              fat: null,
-              carbs: null,
-              nutrition_source: null,
-              barcode_source: null,
-              active: 1,
-              created_at: now,
-              updated_at: now,
-            };
-            dishes.push(d);
-            if (d.artikul) byArt.set(String(d.artikul), d);
-            added++;
-          }
-          matched++;
-          d.iiko_id = it.iikoId || d.iiko_id || null;
-          d.iiko_synced_at = now;
-
-          if (it.composition && d.composition_source !== 'manual') {
-            if (d.composition !== it.composition) {
-              d.composition = it.composition;
-              d.composition_source = 'iiko';
-              compSet++;
-            }
-          }
-
-          const hasFull =
-            it.protein != null && it.fat != null && it.carbs != null && it.kcal != null;
-          const hasAny = it.protein != null || it.fat != null || it.carbs != null || it.kcal != null;
-          const nutrLocked = d.nutrition_source === 'manual' || d.nutrition_source === 'import';
-          if (hasAny && !nutrLocked) {
-            d.protein = num1(it.protein);
-            d.fat = num1(it.fat);
-            d.carbs = num1(it.carbs);
-            d.kcal = it.kcal == null ? null : Math.round(Number(it.kcal));
-            d.nutrition_source = hasFull ? 'iiko-computed' : 'iiko-partial';
-            if (hasFull) nutrSet++;
-            else nutrPartial++;
-          }
-          d.updated_at = now;
-        }
-
-        await setJSON('dishes', dishes);
-        const result = {
-          ok: true,
-          at: now,
-          received: items.length,
-          matched,
-          added,
-          compositionSet: compSet,
-          nutritionSet: nutrSet,
-          nutritionPartial: nutrPartial,
+        const result = await mergeNomenclature({
+          items: body.items,
+          stats: body.stats || null,
           message: body.message || null,
-          agentStats: body.stats || null,
-        };
-        s0['sync.lastRunAt'] = now;
-        s0['sync.lastResult'] = result;
-        await setJSON('settings', s0);
-        await logEvent(
-          'info',
-          'sync',
-          `iiko: получено ${items.length}, сопоставлено ${matched}, состав +${compSet}, КБЖУ +${nutrSet} (частично ${nutrPartial}), новых ${added}`
-        );
+        });
         return json(result);
       }
     }
@@ -684,8 +720,18 @@ async function logEvent(level, context, message, detail) {
 
 /* --- Cloudflare Pages Functions entrypoint --- */
 export async function onRequest(context) {
-  initStore(context.env);
-  ADMIN_TOKEN = context.env.GOFOOD_TOKEN || '';
-  AGENT_TOKEN = context.env.GOFOOD_AGENT_TOKEN || '';
+  const env = context.env || {};
+  initStore(env);
+  ADMIN_TOKEN = env.GOFOOD_TOKEN || '';
+  AGENT_TOKEN = env.GOFOOD_AGENT_TOKEN || '';
+  IIKO_CFG =
+    env.IIKO_HOST && env.IIKO_LOGIN && (env.IIKO_PASSWORD || env.IIKO_API_PASSWORD)
+      ? {
+          host: env.IIKO_HOST,
+          login: env.IIKO_LOGIN,
+          password: env.IIKO_PASSWORD || '',
+          apiPassword: env.IIKO_API_PASSWORD || '',
+        }
+      : null;
   return route(context.request);
 }

@@ -4,19 +4,18 @@ import type { Settings } from '../../types';
 
 export default function SyncTab() {
   const [st, setSt] = useState<any>(null);
-  const [agent, setAgent] = useState<any>(null);
   const [s, setS] = useState<Settings | null>(null);
   const [msg, setMsg] = useState('');
+  const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState('');
 
   const load = () => {
     api.syncStatus().then(setSt).catch(() => {});
-    api.agentInfo().then(setAgent).catch(() => {});
     api.getSettings().then((r) => setS(r.settings)).catch(() => {});
   };
   useEffect(() => {
     load();
-    const id = setInterval(load, 5000);
+    const id = setInterval(load, 10000);
     return () => clearInterval(id);
   }, []);
 
@@ -47,16 +46,22 @@ export default function SyncTab() {
   }
 
   async function runNow() {
-    setMsg('Ставлю задание синхронизации…');
+    setBusy(true);
+    setMsg('Синхронизация с iiko… это занимает 10–40 секунд, не закрывайте страницу.');
     try {
       const r: any = await api.syncRun();
-      setMsg(
-        r.ok
-          ? `Задание #${r.jobId} создано. Агент на моноблоке выполнит синхронизацию (обычно 10–60 c).`
-          : 'Ошибка: ' + (r.error || 'нужен пароль администратора')
-      );
+      if (r.ok && r.mode === 'cloud') {
+        setMsg(`Готово: сопоставлено ${r.matched}, состав обновлён у ${r.compositionSet} блюд.`);
+        load();
+      } else if (r.ok && r.mode === 'agent') {
+        setMsg(`Задание #${r.jobId} создано — выполнит Print Agent (iiko-креды в облаке не заданы).`);
+      } else {
+        setMsg('Ошибка: ' + (r.error || 'нужен пароль администратора'));
+      }
     } catch (e: any) {
       setMsg('Ошибка: ' + String(e?.message || e));
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -69,32 +74,16 @@ export default function SyncTab() {
       <div className="card">
         <h2>Синхронизация с iiko</h2>
         <p className="muted">
-          Состав блюд (техкарты) и КБЖУ (автоподсчёт из ингредиентов) берутся из iiko автоматически.
-          Выполняет <b>Print Agent на моноблоке</b> — логин и пароль iiko хранятся там, в{' '}
-          <span className="mono">agent-config.json</span>, в облако и GitHub не попадают.
+          Состав блюд берётся из техкарт iiko. Синхронизацию выполняет <b>сам сайт (облако)</b> —
+          Print Agent для этого не нужен. Логин и пароль iiko хранятся в секретах Cloudflare Pages.
           <br />
-          Ручные правки состава/КБЖУ в разделе «Блюда» синхронизация <b>не затирает</b>.
+          Ручные правки состава в разделе «Блюда» синхронизация <b>не затирает</b>.
+          КБЖУ через API iiko недоступно — его загружают Excel-файлом (вкладка «Импорт Excel»).
         </p>
 
-        <div
-          className="banner"
-          style={{
-            background: agent?.online ? '#eef8f0' : '#fdeeee',
-            border: '1px solid ' + (agent?.online ? '#bfe3c6' : '#f0c4c4'),
-          }}
-        >
-          Агент: {agent?.online ? '🟢 на связи' : '🔴 не отвечает'}
-          {agent?.agent && (
-            <>
-              {' '}· iiko {agent.agent.iikoConfigured ? 'настроен' : '❗ не настроен в agent-config.json'}
-              {agent.agent.lastSyncAt && ` · последняя синхр.: ${new Date(agent.agent.lastSyncAt).toLocaleString('ru-RU')}`}
-            </>
-          )}
-        </div>
-
         <div className="row wrap" style={{ marginTop: 12 }}>
-          <button className="btn primary" onClick={runNow}>
-            🔄 Синхронизировать сейчас
+          <button className="btn primary" onClick={runNow} disabled={busy}>
+            {busy ? <span className="spinner" /> : '🔄'} Синхронизировать сейчас
           </button>
           {msg && <span className="muted">{msg}</span>}
         </div>
