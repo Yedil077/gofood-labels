@@ -168,7 +168,10 @@ export default function PrintPage() {
         pollRef.current = null;
         setResult((cur) =>
           cur?.kind === 'wait'
-            ? { kind: 'err', text: 'Агент печати не ответил. Проверьте, что Print Agent запущен на ПК с принтером.' }
+            ? {
+                kind: 'err',
+                text: 'Print Agent не ответил. Печатайте кнопкой «ПЕЧАТЬ» (через браузер) или запустите агент на ПК с принтером.',
+              }
             : cur
         );
       }
@@ -317,23 +320,24 @@ export default function PrintPage() {
             <QuantityStepper value={qty} onChange={setQty} />
 
             <div style={{ marginTop: 18 }}>
-              <button className="btn primary big" disabled={busy} onClick={() => doPrint(false)}>
-                {busy ? <span className="spinner" /> : '🖨'} ПЕЧАТЬ{qty > 1 ? ` · ${qty} шт.` : ''}
+              <button
+                className="btn primary big"
+                onClick={() => labelData && printViaBrowser(labelData, rp as any, qty)}
+              >
+                🖨 ПЕЧАТЬ{qty > 1 ? ` · ${qty} шт.` : ''}
               </button>
               <button
-                className="btn big"
+                className="btn"
                 style={{ marginTop: 8 }}
-                onClick={() =>
-                  labelData &&
-                  printViaBrowser(labelData, rp as any, qty)
-                }
-                title="Открыть диалог печати браузера (без Print Agent)"
+                disabled={busy}
+                onClick={() => doPrint(false)}
+                title="Тихая печать через Print Agent на ПК с принтером"
               >
-                🖨 Печать через браузер
+                {busy ? <span className="spinner" /> : '🖨'} Через агент печати
               </button>
               <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
-                «ПЕЧАТЬ» — через агент на ПК с принтером. «Через браузер» — сразу диалог печати
-                (выберите принтер, поля «Нет», масштаб 100%).
+                «ПЕЧАТЬ» открывает диалог печати браузера — принтер, поля «Нет», масштаб 100 %.
+                «Через агент» — тихая печать на ПК с принтером (нужен запущенный Print Agent).
               </div>
             </div>
 
