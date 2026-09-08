@@ -289,7 +289,6 @@ function EditModal({
               <button
                 className="btn primary"
                 onClick={() => {
-                  setDirty(false);
                   onSave({
                     name: f.name,
                     category: f.category,
