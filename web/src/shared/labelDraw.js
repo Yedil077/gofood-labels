@@ -301,9 +301,15 @@ function drawVector(ctx, opts) {
     widthMm - (xL0 + 8) - safeMm,
     font(2.4, false)
   ).slice(0, 2);
-  const stLh = 2.4 * K * 1.15;
-  const stTop = fridgeCy - (stEls.length * stLh) / 2 + 0.15; // по центру значка
-  lines(stEls, xL0 + 8, stTop, 2.4, { lh: 1.15 });
+  // текст строго по вертикальному центру значка холодильника
+  ctx.save();
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = INK;
+  ctx.font = font(2.4, false);
+  const stLh = mm(2.4 * K * 1.2);
+  const stY0 = mm(fridgeCy) - ((stEls.length - 1) * stLh) / 2;
+  stEls.forEach((l, i) => ctx.fillText(l, mm(xL0 + 8), stY0 + i * stLh));
+  ctx.restore();
 }
 
 function drawFridge(ctx, mm, color, cxMm, cyMm, rMm) {
