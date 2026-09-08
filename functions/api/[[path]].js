@@ -117,6 +117,10 @@ async function route(req) {
     /* --- health --- */
     if (path === '/' || path === '/health') return json({ ok: true, ts: new Date().toISOString() });
 
+    /* --- проверка пароля администратора (для индикатора на странице настроек) --- */
+    if (path === '/admin/check')
+      return json({ ok: isAdmin(req), tokenRequired: !!ADMIN_TOKEN });
+
     /* --- settings --- */
     if (seg[0] === 'settings') {
       if (method === 'GET') return json({ settings: await loadSettings() });

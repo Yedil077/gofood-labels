@@ -15,6 +15,7 @@ async function req<T = any>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   health: () => req('/health'),
+  adminCheck: () => req<{ ok: boolean; tokenRequired: boolean }>('/admin/check'),
 
   getSettings: () => req<{ settings: Settings }>('/settings'),
   saveSettings: (patch: Record<string, any>) =>

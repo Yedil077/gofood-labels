@@ -19,7 +19,22 @@ export default function SettingsTab() {
   const [ceText, setCeText] = useState('');
   const [ceErr, setCeErr] = useState('');
   const [tok, setTok] = useState(getToken());
+  const [tokState, setTokState] = useState<'idle' | 'checking' | 'ok' | 'bad' | 'notneeded'>('idle');
   const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  // живая проверка пароля администратора (без кнопки «Сохранить»)
+  useEffect(() => {
+    setTokState('checking');
+    const t = setTimeout(async () => {
+      try {
+        const r = await api.adminCheck();
+        setTokState(!r.tokenRequired ? 'notneeded' : r.ok ? 'ok' : 'bad');
+      } catch {
+        setTokState('idle');
+      }
+    }, 400);
+    return () => clearTimeout(t);
+  }, [tok]);
 
   useEffect(() => {
     api.getSettings().then((r) => {
@@ -116,19 +131,43 @@ export default function SettingsTab() {
           печать. <b>Работникам кухни вводить ничего не нужно</b> — экран «Печать» работает сам.
         </p>
         <label className="fld">Пароль администратора</label>
-        <input
-          type="password"
-          value={tok}
-          placeholder="значение GOFOOD_TOKEN из Cloudflare Pages → Settings"
-          style={{ maxWidth: 420 }}
-          onChange={(e) => {
-            setTok(e.target.value);
-            setToken(e.target.value);
-          }}
-        />
+        <div className="row" style={{ gap: 10, alignItems: 'center' }}>
+          <input
+            type="password"
+            value={tok}
+            placeholder="значение GOFOOD_TOKEN из Cloudflare Pages → Settings"
+            style={{ maxWidth: 420, flex: 1 }}
+            onChange={(e) => {
+              setTok(e.target.value);
+              setToken(e.target.value);
+            }}
+          />
+          <span
+            style={{
+              fontWeight: 700,
+              whiteSpace: 'nowrap',
+              color:
+                tokState === 'ok' || tokState === 'notneeded'
+                  ? '#1a8a3a'
+                  : tokState === 'bad'
+                  ? '#c0392b'
+                  : '#8a8a8a',
+            }}
+          >
+            {tokState === 'checking'
+              ? 'проверяю…'
+              : tokState === 'ok'
+              ? '✓ пароль принят'
+              : tokState === 'bad'
+              ? '✗ неверный пароль'
+              : tokState === 'notneeded'
+              ? '✓ пароль не требуется'
+              : ''}
+          </span>
+        </div>
         <p className="muted" style={{ fontSize: 12 }}>
-          Сохраняется только в этом браузере. <b>Без него импорт и правка блюд (в т.ч. состав)
-          не сохраняются</b> — сервер отвечает 401.
+          Сохраняется автоматически в этом браузере, кнопка не нужна. <b>Без верного пароля
+          импорт и правка блюд (в т.ч. состав) не сохраняются</b> — сервер отвечает 401.
         </p>
         <div
           className="banner"
