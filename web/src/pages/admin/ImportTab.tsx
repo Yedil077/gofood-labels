@@ -114,9 +114,31 @@ export default function ImportTab() {
           style={{ display: 'none' }}
           onChange={(e) => e.target.files?.[0] && onKbjuFile(e.target.files[0])}
         />
-        <button className="btn" disabled={kbjuBusy} onClick={() => kbjuRef.current?.click()}>
-          {kbjuBusy ? <span className="spinner" /> : '📥'} Импортировать КБЖУ
-        </button>
+        <div className="row wrap" style={{ gap: 8 }}>
+          <button className="btn" disabled={kbjuBusy} onClick={() => kbjuRef.current?.click()}>
+            {kbjuBusy ? <span className="spinner" /> : '📥'} Импортировать КБЖУ
+          </button>
+          <button
+            className="btn"
+            disabled={kbjuBusy}
+            onClick={async () => {
+              if (!confirm('Удалить всё импортированное / из iiko КБЖУ у всех блюд? Введённые вручную значения останутся.')) return;
+              setKbjuBusy(true);
+              setKbjuMsg('');
+              try {
+                const r: any = await api.clearKbju();
+                if (r._status >= 400) throw new Error(r.error || 'ошибка ' + r._status);
+                setKbjuMsg(`Очищено КБЖУ у ${r.cleared} блюд.`);
+              } catch (e: any) {
+                setKbjuMsg('Ошибка: ' + String(e?.message || e));
+              } finally {
+                setKbjuBusy(false);
+              }
+            }}
+          >
+            🗑 Очистить всё КБЖУ
+          </button>
+        </div>
         {kbjuMsg && (
           <div className={'banner ' + (kbjuMsg.startsWith('Ошибка') ? 'err' : 'ok')} style={{ marginTop: 12 }}>
             {kbjuMsg}

@@ -301,6 +301,14 @@ async function route(req) {
         if (!isAdmin(req)) return denyAdmin();
         if (idx < 0) return json({ error: 'Блюдо не найдено' }, 404);
         const d = dishes[idx];
+        // «источник = вручную» ставим только если значение реально изменилось,
+        // иначе правка одного лишь состава помечала бы и КБЖУ как ручное.
+        const nutrChanged = ['kcal', 'protein', 'fat', 'carbs'].some(
+          (k) => k in body && toNum(body[k]) !== (d[k] ?? null)
+        );
+        const catChanged = 'category' in body && String(body.category ?? '') !== String(d.category ?? '');
+        const compChanged =
+          'composition' in body && String(body.composition ?? '') !== String(d.composition ?? '');
         for (const key of DISH_EDITABLE) {
           if (!(key in body)) continue;
           if (key === 'active') d.active = body[key] ? 1 : 0;
@@ -310,13 +318,9 @@ async function route(req) {
             d.diet_type = body[key] === 'pp' || body[key] === 'classic' ? body[key] : null;
           else d[key] = body[key];
         }
-        if ('category' in body && !('category_source' in body)) d.category_source = 'manual';
-        if ('composition' in body && !('composition_source' in body)) d.composition_source = 'manual';
-        if (
-          ['kcal', 'protein', 'fat', 'carbs'].some((k) => k in body) &&
-          !('nutrition_source' in body)
-        )
-          d.nutrition_source = 'manual';
+        if (catChanged && !('category_source' in body)) d.category_source = 'manual';
+        if (compChanged && !('composition_source' in body)) d.composition_source = 'manual';
+        if (nutrChanged && !('nutrition_source' in body)) d.nutrition_source = 'manual';
         d.updated_at = new Date().toISOString();
         await setJSON('dishes', dishes);
         await logEvent('info', 'dishes', `Отредактировано блюдо #${d.id} «${d.name}»`);
@@ -328,6 +332,27 @@ async function route(req) {
     if (seg[0] === 'import') {
       if (seg[1] === 'batches' && method === 'GET') {
         return json({ batches: (await getJSON('batches', [])) || [] });
+      }
+
+      // очистить всё импортированное/из iiko КБЖУ (ручные значения не трогаем)
+      if (seg[1] === 'kbju' && method === 'DELETE') {
+        if (!isAdmin(req)) return denyAdmin();
+        const dishes = await loadDishes();
+        let cleared = 0;
+        for (const d of dishes) {
+          if (d.nutrition_source && d.nutrition_source !== 'manual') {
+            d.protein = null;
+            d.fat = null;
+            d.carbs = null;
+            d.kcal = null;
+            d.nutrition_source = null;
+            d.updated_at = new Date().toISOString();
+            cleared++;
+          }
+        }
+        await setJSON('dishes', dishes);
+        await logEvent('info', 'import', `КБЖУ очищено у ${cleared} блюд (кроме ручных)`);
+        return json({ ok: true, cleared });
       }
 
       // импорт КБЖУ отдельным файлом
