@@ -119,7 +119,7 @@ export default function SettingsTab() {
         <input
           type="password"
           value={tok}
-          placeholder="значение GOFOOD_TOKEN из Netlify → Environment variables"
+          placeholder="значение GOFOOD_TOKEN из Cloudflare Pages → Settings"
           style={{ maxWidth: 420 }}
           onChange={(e) => {
             setTok(e.target.value);
@@ -127,7 +127,8 @@ export default function SettingsTab() {
           }}
         />
         <p className="muted" style={{ fontSize: 12 }}>
-          Сохраняется только в этом браузере. Если в Netlify переменная не задана — пароль не нужен.
+          Сохраняется только в этом браузере. <b>Без него импорт и правка блюд (в т.ч. состав)
+          не сохраняются</b> — сервер отвечает 401.
         </p>
         <div
           className="banner"

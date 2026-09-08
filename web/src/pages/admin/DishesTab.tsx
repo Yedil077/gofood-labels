@@ -50,7 +50,15 @@ export default function DishesTab() {
 
   async function save(patch: Partial<Dish>) {
     if (!edit) return;
-    const r = await api.updateDish(edit.id, patch);
+    const r: any = await api.updateDish(edit.id, patch);
+    if (r?._status >= 400 || !r?.dish) {
+      alert(
+        r?._status === 401 || r?.error === 'Требуется токен администратора'
+          ? 'Изменения НЕ сохранены: не введён пароль администратора.\n\nОткройте Настройки → «Доступ администратора» и введите пароль, затем сохраните снова.'
+          : 'Не удалось сохранить: ' + (r?.error || 'ошибка ' + (r?._status || '?'))
+      );
+      return; // модалку не закрываем — данные в форме остаются
+    }
     setEdit(r.dish);
     load();
   }
@@ -143,7 +151,15 @@ function EditModal({
     diet_type: dish.diet_type || '',
     active: dish.active,
   });
-  const set = (k: string, v: any) => setF((s) => ({ ...s, [k]: v }));
+  const [dirty, setDirty] = useState(false);
+  const set = (k: string, v: any) => {
+    setDirty(true);
+    setF((s) => ({ ...s, [k]: v }));
+  };
+  const guardedClose = () => {
+    if (dirty && !confirm('Есть несохранённые изменения. Закрыть без сохранения?')) return;
+    onClose();
+  };
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -170,7 +186,7 @@ function EditModal({
   }, [JSON.stringify(f)]);
 
   return (
-    <div className="modal-bg" onClick={onClose}>
+    <div className="modal-bg" onClick={guardedClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 920 }}>
         <div className="split2">
           <div>
@@ -252,10 +268,11 @@ function EditModal({
             </label>
 
             <div className="row" style={{ marginTop: 16, justifyContent: 'flex-end' }}>
-              <button className="btn" onClick={onClose}>Закрыть</button>
+              <button className="btn" onClick={guardedClose}>Закрыть</button>
               <button
                 className="btn primary"
-                onClick={() =>
+                onClick={() => {
+                  setDirty(false);
                   onSave({
                     name: f.name,
                     category: f.category,
@@ -267,9 +284,10 @@ function EditModal({
                     shelf_life_hours: f.shelf_life_hours === '' ? null : Number(f.shelf_life_hours),
                     storage_text: f.storage_text,
                     barcode_source: f.barcode_source || null,
+                    diet_type: f.diet_type || null,
                     active: f.active,
-                  } as any)
-                }
+                  } as any);
+                }}
               >
                 Сохранить
               </button>
