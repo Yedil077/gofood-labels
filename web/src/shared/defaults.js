@@ -44,6 +44,10 @@ export const DEFAULTS = {
   'brand.logo': 'gofood',
   'brand.fontScale': 1.0,
   'label.showDietType': true, // показывать значок «ПП» / «Классический» у слогана
+  // 'ticket' — вес/время/срок хранения по категории (как в iiko-ценнике), дата = завтра;
+  // 'formula' — старый расчёт даты/времени из контрольных примеров
+  'label.timeMode': 'ticket',
+  'label.shelfHoursDefault': 42, // срок хранения для категорий вне таблицы
   'storage.text': 'Хранить в холодильнике при температуре от +2 °C до +6 °C.',
 
   // Дата/время

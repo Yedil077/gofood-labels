@@ -514,25 +514,26 @@ async function route(req) {
       }
       const local = body.clientLocal || utcShiftedKey(settings.datetime.tzOffsetMin);
       const dt = calculateLabelDateTime(local, settings.datetime);
+      const label = normalizeDishForLabel(dish, settings, dt);
       const job = await enqueueJob({
         kind: 'label',
         quantity,
         user: body.user || 'kitchen',
         dish: { id: dish.id, name: dish.name, code: dish.code, artikul: dish.artikul },
-        label: normalizeDishForLabel(dish, settings, dt),
+        label,
         render: renderParams(settings),
-        labelDate: dt.date,
-        labelTime: dt.time,
-        approximateTime: dt.approximate,
+        labelDate: label.dateStr,
+        labelTime: label.timeStr,
+        approximateTime: label.approximateTime,
       });
       await logEvent('info', 'print', `Задание #${job.id}: ${dish.name} ×${quantity}`);
       return json({
         ok: true,
         jobId: job.id,
         status: job.status,
-        labelDate: dt.date,
-        labelTime: dt.time,
-        approximateTime: dt.approximate,
+        labelDate: label.dateStr,
+        labelTime: label.timeStr,
+        approximateTime: label.approximateTime,
         warnings: warns.map((c) => ({ code: c, text: WARNING_TEXT[c] })),
       });
     }

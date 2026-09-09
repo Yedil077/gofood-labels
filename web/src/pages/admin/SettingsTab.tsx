@@ -94,6 +94,8 @@ export default function SettingsTab() {
       'brand.logo': s!['brand.logo'] || 'gofood',
       'brand.fontScale': Number(s!['brand.fontScale']) || 1,
       'label.showDietType': s!['label.showDietType'] !== false,
+      'label.timeMode': s!['label.timeMode'] || 'ticket',
+      'label.shelfHoursDefault': Number(s!['label.shelfHoursDefault']) || 42,
       'storage.text': s!['storage.text'],
       datetime: { ...dtClean, controlExamples },
     };
@@ -384,18 +386,50 @@ export default function SettingsTab() {
           В блоке «Категория» на этикетке показывать «ПП» / «Классический» вместо категории iiko
         </label>
 
-        <label className="fld">Условия хранения</label>
+        <label className="fld">Условия хранения (температурная строка)</label>
         <textarea value={s['storage.text']} onChange={(e) => set('storage.text', e.target.value)} />
+        <p className="muted" style={{ fontSize: 12 }}>
+          Строку «Срок хранения …» добавлять не нужно — она подставляется автоматически
+          (42 часа, а для Десертов и Напитков 72).
+        </p>
       </div>
 
       {/* --- Дата/время --- */}
       <div className="card" style={{ marginTop: 18 }}>
         <h2>Дата/время на этикетке</h2>
-        <div className="banner warn">
+
+        <label className="fld">Как считать дату и время</label>
+        <select value={s['label.timeMode'] || 'ticket'} onChange={(e) => set('label.timeMode', e.target.value)}>
+          <option value="ticket">По категории (как в iiko-ценнике): дата = завтра, время из таблицы</option>
+          <option value="formula">Расчёт из контрольных примеров (старый режим)</option>
+        </select>
+        <div className="row wrap" style={{ marginTop: 8 }}>
+          <div>
+            <label className="fld">Срок хранения по умолчанию, ч</label>
+            <input
+              type="number"
+              min={1}
+              value={s['label.shelfHoursDefault'] ?? 42}
+              onChange={(e) => set('label.shelfHoursDefault', e.target.value)}
+              style={{ width: 110 }}
+            />
+          </div>
+        </div>
+        {(s['label.timeMode'] || 'ticket') === 'ticket' ? (
+          <div className="banner" style={{ marginTop: 10 }}>
+            Таблица «категория → вес / время изготовления»: Горячее из говядины 340 г / 00:05 ·
+            из индейки 360 г / 00:10 · из курицы 340 г / 00:25 · из рыбы 320 г / 00:15 ·
+            Десерты 170 г / 00:45 (72 ч) · Завтраки 150 г / 01:00 · Напитки 500 мл / 01:10 (72 ч) ·
+            Перекусы 140 г / 01:15 · Салаты 160 г / 02:05 · Супы 400 г / 00:40.
+            Категории вне таблицы — время не печатается, срок хранения по умолчанию.
+          </div>
+        ) : (
+        <div className="banner warn" style={{ marginTop: 10 }}>
           Правило <b>времени</b> из 6 контрольных примеров ТЗ однозначно не выводится — оно не
           придумано. Точные значения даёт таблица ниже; для прочих моментов время помечается
           приблизительным. Правило <b>даты</b> (смена в 09:00) работает всегда.
         </div>
+        )}
         <div className="row wrap">
           <div>
             <label className="fld">Дата на этикетке</label>

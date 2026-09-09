@@ -184,11 +184,13 @@ export default function PrintPage() {
     <div>
       <div className="row" style={{ justifyContent: 'space-between', alignItems: 'baseline' }}>
         <h1 style={{ marginBottom: 4 }}>Печать этикеток</h1>
-        {dt && (
-          <span className={'tag ' + (dt.approximate ? 'warn' : 'ok')}>
-            на этикетке: {dt.date} {dt.time}
+        {labelData ? (
+          <span className={'tag ' + (labelData.approximateTime ? 'warn' : 'ok')}>
+            на этикетке: {labelData.dateStr} {labelData.timeStr}
           </span>
-        )}
+        ) : dt ? (
+          <span className="tag ok">дата на этикетке: {dt.date}</span>
+        ) : null}
       </div>
 
       {/* Поиск доступен всегда */}

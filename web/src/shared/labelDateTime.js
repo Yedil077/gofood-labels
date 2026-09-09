@@ -72,7 +72,7 @@ export function calculateLabelDateTime(currentDateTime, config = {}) {
   const hit = (cfg.controlExamples || []).find((e) => e.in === key);
   if (hit) {
     const out = parseLocal(hit.out);
-    return { date: fmtDate(out), time: fmtTime(out), iso: out.toISOString(), approximate: false, ruleId: 'control' };
+    return { now: key, date: fmtDate(out), time: fmtTime(out), iso: out.toISOString(), approximate: false, ruleId: 'control' };
   }
 
   const minutesOfDay = now.getHours() * 60 + now.getMinutes();
@@ -97,6 +97,7 @@ export function calculateLabelDateTime(currentDateTime, config = {}) {
   labelDate.setHours(hh, mm, 0, 0);
 
   return {
+    now: key,
     date: fmtDate(labelDate),
     time: fmtTime(labelDate),
     iso: labelDate.toISOString(),

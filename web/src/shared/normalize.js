@@ -2,6 +2,8 @@
 import { ean13FromArtikul } from './barcode.js';
 import { resolveBrand } from './brand.js';
 import { resolveDietType, dietTypeLabel } from './dietType.js';
+import { resolveTicketRule, ticketDate, DEFAULT_SHELF_HOURS } from './priceTicket.js';
+import { groupOf } from './categories.js';
 
 export const WARNING_TEXT = {
   composition: 'Не заполнен состав',
@@ -46,9 +48,35 @@ export function warningObjects(dish, settings) {
  */
 export function normalizeDishForLabel(dish, settings, dt) {
   const bc = pickBarcodeValue(dish, settings);
+
+  // Режим 'ticket' (по умолчанию): вес/время/срок хранения по категории (как в iiko-ценнике),
+  // дата = следующий день. Режим 'formula' — старый расчёт из dt.
+  const ticketMode = (settings['label.timeMode'] || 'ticket') !== 'formula';
+  const rule = resolveTicketRule(dish.category, groupOf(dish.category).group);
+  const shelfHours = rule ? rule.shelfHours
+    : Number(settings['label.shelfHoursDefault']) || DEFAULT_SHELF_HOURS;
+
+  let dateStr = dt?.date || '';
+  let timeStr = dt?.time || '';
+  let approximate = !!dt?.approximate;
+  if (ticketMode) {
+    dateStr = ticketDate(dt?.now);
+    timeStr = rule ? rule.time : '';
+    approximate = false;
+  }
+
+  // Условия хранения: температурная строка + «Срок хранения N часа» (N зависит от категории).
+  const baseStorage = (dish.storage_text || settings['storage.text'] || '')
+    .replace(/\s*срок\s+хранения[^.\n]*\.?/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const storageText = [baseStorage, `Срок хранения ${shelfHours} часа.`].filter(Boolean).join(' ');
+
   return {
     name: dish.name || '',
     category: dish.category || '',
+    weight: rule ? rule.weight : '',
+    shelfHours,
     kbju: {
       protein: dish.protein ?? null,
       fat: dish.fat ?? null,
@@ -60,10 +88,10 @@ export function normalizeDishForLabel(dish, settings, dt) {
     barcodeSource: bc.source,
     symbology: bc.symbology || settings['barcode.symbology'] || 'code128',
     showBarcodeText: settings['barcode.showText'] !== false,
-    storageText: dish.storage_text || settings['storage.text'] || '',
-    dateStr: dt?.date || '',
-    timeStr: dt?.time || '',
-    approximateTime: !!dt?.approximate,
+    storageText,
+    dateStr,
+    timeStr,
+    approximateTime: approximate,
     brand: resolveBrand(settings), // { name, logo, tagline, color }
     fontScale: Number(settings['brand.fontScale']) || 1,
     dietType: resolveDietType(dish), // 'pp' | 'classic'

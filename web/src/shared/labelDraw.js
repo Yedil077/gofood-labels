@@ -250,9 +250,10 @@ function drawVector(ctx, opts) {
       text('—', xR0, midTop + 2.8, 2.5, { color: GREY });
     }
   }
-  cap('КБЖУ', bx, midTop);
   const k = data.kbju || {};
-  if (k.protein != null || k.fat != null || k.carbs != null || k.kcal != null) {
+  const hasKbju = k.protein != null || k.fat != null || k.carbs != null || k.kcal != null;
+  if (hasKbju) {
+    cap('КБЖУ', bx, midTop);
     lines(
       [
         `Белки: ${fmtNum(k.protein)} г`,
@@ -265,7 +266,11 @@ function drawVector(ctx, opts) {
       2.1,
       { lh: 1.12 }
     );
+  } else if (data.weight) {
+    cap('Вес порции', bx, midTop);
+    text(data.weight, bx, midTop + 2.6, 3.6, { bold: true });
   } else {
+    cap('КБЖУ', bx, midTop);
     text('—', bx, midTop + 2.8, 2.5, { color: GREY });
   }
   dotted(xR0, botTop - 1.6, xR1, botTop - 1.6, brand);
