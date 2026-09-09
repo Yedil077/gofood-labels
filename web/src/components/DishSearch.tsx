@@ -56,7 +56,20 @@ export default function DishSearch({ onPick, selected }: Props) {
 
   return (
     <div className="search-wrap" ref={boxRef}>
-      <span className="search-ic">🔎</span>
+      <svg
+        className="search-ic"
+        width="19"
+        height="19"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.2"
+        strokeLinecap="round"
+        aria-hidden="true"
+      >
+        <circle cx="11" cy="11" r="7" />
+        <line x1="20.5" y1="20.5" x2="16.5" y2="16.5" />
+      </svg>
       <input
         className="search-input"
         type="text"
