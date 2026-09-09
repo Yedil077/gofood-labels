@@ -2,11 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { resolveTicketRule, ticketDate, DEFAULT_SHELF_HOURS } from '../priceTicket.js';
 
-test('таблица категория → вес / время (совпадает с iiko-ценником)', () => {
+test('таблица категория → вес / время (реальные категории iiko)', () => {
   assert.deepEqual(resolveTicketRule('Горячее из говядины'), { weight: '340 г', time: '00:05', shelfHours: 42 });
   assert.deepEqual(resolveTicketRule('Горячее из индейки'), { weight: '360 г', time: '00:10', shelfHours: 42 });
-  assert.deepEqual(resolveTicketRule('Горячие из курицы'), { weight: '340 г', time: '00:25', shelfHours: 42 });
-  assert.deepEqual(resolveTicketRule('Горячие  из рыбы'), { weight: '320 г', time: '00:15', shelfHours: 42 });
+  assert.deepEqual(resolveTicketRule('Горячее из курицы'), { weight: '340 г', time: '00:25', shelfHours: 42 });
+  assert.deepEqual(resolveTicketRule('Горячее из рыбы'), { weight: '320 г', time: '00:15', shelfHours: 42 });
+  assert.deepEqual(resolveTicketRule('Горячие из курицы'), { weight: '340 г', time: '00:25', shelfHours: 42 }); // и мн. число
   assert.deepEqual(resolveTicketRule('Десерты'), { weight: '170 г', time: '00:45', shelfHours: 72 });
   assert.deepEqual(resolveTicketRule('Завтраки'), { weight: '150 г', time: '01:00', shelfHours: 42 });
   assert.deepEqual(resolveTicketRule('Напитки'), { weight: '500 мл', time: '01:10', shelfHours: 72 });
@@ -29,6 +30,7 @@ test('совпадение по подстроке и через группу', 
 
 test('категория вне таблицы -> null', () => {
   assert.equal(resolveTicketRule('Гарниры'), null);
+  assert.equal(resolveTicketRule('2-этаж Каспий'), null);
   assert.equal(resolveTicketRule(''), null);
   assert.equal(resolveTicketRule(null), null);
 });
