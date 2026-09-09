@@ -66,14 +66,12 @@ export function normalizeDishForLabel(dish, settings, dt) {
     approximate = false;
   }
 
-  // Условия хранения: температурная строка + «Срок хранения N часа»
-  // (N зависит от категории; у горячего — строку не печатаем).
+  // Условия хранения: температурная строка + «Срок хранения N часов» (N по категории).
   const baseStorage = (dish.storage_text || settings['storage.text'] || '')
     .replace(/\s*срок\s+хранения[^.\n]*\.?/gi, '')
     .replace(/\s+/g, ' ')
     .trim();
-  const shelfLine =
-    rule && rule.hideShelf ? '' : `Срок хранения ${shelfHours} ${hoursWord(shelfHours)}.`;
+  const shelfLine = `Срок хранения ${shelfHours} ${hoursWord(shelfHours)}.`;
   const storageText = [baseStorage, shelfLine].filter(Boolean).join('\n');
 
   // Ккал: если не задано, но есть Б/Ж/У — считаем по формуле Атуотера.
