@@ -131,14 +131,11 @@ function drawVector(ctx, opts) {
   const xR0 = dividerX + 3;
   const xR1 = widthMm - safeMm;
   const rW = xR1 - xR0;
-  const stripH = 8.5;
-  const stripY = heightMm - stripH;
-
-  // рамка-ориентир (вертикальный разделитель колонок рисуется ниже —
-  // строго от первой пунктирной линии до нижней плашки)
-  ctx.strokeStyle = LINE;
-  ctx.lineWidth = Math.max(1, mm(0.3));
-  ctx.strokeRect(mm(0.6), mm(0.6), mm(widthMm) - mm(1.2), mm(heightMm) - mm(1.2));
+  const stripH = 9;
+  const botSafe = 2; // нижний край: принтер там не печатает — держим отступ
+  const stripY = heightMm - stripH - botSafe;
+  // без внешней рамки — печаталась серой чертой по краю; оставлен только
+  // вертикальный разделитель колонок (рисуется ниже).
 
   /* --- логотип --- */
   const logoBoxW = xLw;
@@ -157,7 +154,7 @@ function drawVector(ctx, opts) {
   /* --- состав (жёстко в границах, не заезжает на нижнюю плашку) --- */
   const compTop = safeMm + logoBoxH + 3;
   const compTextTop = compTop + 6.2;
-  const compBottom = heightMm - stripH - 2; // не ниже нижней плашки
+  const compBottom = stripY - 2; // не ниже нижней плашки
   text('Состав', xL0, compTop, 3.2, { bold: true });
   dotted(xL0, compTop + 4.6, xL0 + xLw, compTop + 4.6, brand);
   if (data.composition && data.composition.trim()) {
@@ -218,8 +215,8 @@ function drawVector(ctx, opts) {
 
   // Нижние два блока привязаны к низу этикетки (над плашкой «Хранить»),
   // чтобы не оставалось пустоты. Между ними и названием — гибкий зазор.
-  const bottomOfContent = heightMm - stripH - 1.5;
-  const botH = 12.5; // штрихкод / дата-время
+  const bottomOfContent = stripY - 1.5;
+  const botH = 14; // штрихкод / дата-время
   const midH = 10.5; // категория / КБЖУ
   const botTop = bottomOfContent - botH;
   const midTop = botTop - 1.6 - 1.8 - midH;
@@ -237,18 +234,17 @@ function drawVector(ctx, opts) {
   lines(nf.lines, xR0, nameY, nf.size, { bold: true, lh: 1.14 });
   dotted(xR0, midTop - 2, xR1, midTop - 2, brand);
 
-  // --- тип питания (или категория) / КБЖУ ---
+  // --- категория (тип питания) / КБЖУ ---
+  cap('Категория', xR0, midTop);
   if (data.showDietType) {
-    cap('Тип питания', xR0, midTop);
-    text(data.dietTypeLabel || 'Классический', xR0, midTop + 2.6, 3.6, { bold: true });
+    const dl = data.dietTypeLabelFull || (data.dietType === 'pp' ? 'Правильное питание' : 'Классическое питание');
+    const df = fit(dl, cW, 2, 3.0, 2.2, true);
+    lines(df.lines, xR0, midTop + 2.5, df.size, { bold: true, lh: 1.1 });
+  } else if (data.category) {
+    const cf = fit(data.category, cW, 3, 2.9, 2.1, false);
+    lines(cf.lines, xR0, midTop + 2.5, cf.size, { lh: 1.12 });
   } else {
-    cap('Категория', xR0, midTop);
-    if (data.category) {
-      const cf = fit(data.category, cW, 3, 2.9, 2.1, false);
-      lines(cf.lines, xR0, midTop + 2.5, cf.size, { lh: 1.12 });
-    } else {
-      text('—', xR0, midTop + 2.8, 2.5, { color: GREY });
-    }
+    text('—', xR0, midTop + 2.8, 2.5, { color: GREY });
   }
   cap('КБЖУ', bx, midTop);
   const k = data.kbju || {};
@@ -287,29 +283,40 @@ function drawVector(ctx, opts) {
   } else {
     text('—', xR0, botTop + 5, 2.5, { color: GREY });
   }
-  const dx = bx + 1.5; // дата чуть правее
-  cap('Дата / время изготовления', dx, botTop);
-  text(data.dateStr || '—', dx, botTop + 3.2, 3.3, { bold: true });
-  text(data.timeStr || '', dx, botTop + 7.4, 4.1, { bold: true });
+  const capX = bx + 1;
+  const dx = bx + 3; // значения даты/времени — правее подписи
+  cap('Дата / время изготовления', capX, botTop);
+  text(data.dateStr || '—', dx, botTop + 3.5, 3.4, { bold: true });
+  text(data.timeStr || '', dx, botTop + 8.5, 4.4, { bold: true });
 
   /* --- нижняя полоса --- */
   dotted(xL0, stripY, xR1, stripY, brand);
   const fridgeCy = stripY + stripH / 2;
-  drawFridge(ctx, mm, brand, xL0 + 3, fridgeCy, 2.9);
-  const stEls = wrap(
-    data.storageText || '',
-    widthMm - (xL0 + 8) - safeMm,
-    font(2.4, false)
-  ).slice(0, 2);
-  // текст строго по вертикальному центру значка холодильника
-  ctx.save();
-  ctx.textBaseline = 'middle';
-  ctx.fillStyle = INK;
-  ctx.font = font(2.4, false);
-  const stLh = mm(2.4 * K * 1.2);
-  const stY0 = mm(fridgeCy) - ((stEls.length - 1) * stLh) / 2;
-  stEls.forEach((l, i) => ctx.fillText(l, mm(xL0 + 8), stY0 + i * stLh));
-  ctx.restore();
+  drawFridge(ctx, mm, brand, xL0 + 3, fridgeCy, 2.7);
+  {
+    const availW = widthMm - (xL0 + 8) - safeMm;
+    const parts = String(data.storageText || '')
+      .split('\n')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    let sz = 2.4;
+    let els = [];
+    for (let g = 0; g < 10; g++) {
+      els = [];
+      for (const p of parts) for (const w of wrap(p, availW, font(sz, false))) els.push(w);
+      if (els.length <= 3 || sz <= 1.8) break;
+      sz = Math.round((sz - 0.15) * 100) / 100;
+    }
+    els = els.slice(0, 3);
+    ctx.save();
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = INK;
+    ctx.font = font(sz, false);
+    const lh = mm(sz * K * 1.18);
+    const y0 = mm(fridgeCy) - ((els.length - 1) * lh) / 2;
+    els.forEach((l, i) => ctx.fillText(l, mm(xL0 + 8), y0 + i * lh));
+    ctx.restore();
+  }
 }
 
 function drawFridge(ctx, mm, color, cxMm, cyMm, rMm) {

@@ -70,7 +70,7 @@ export function normalizeDishForLabel(dish, settings, dt) {
     .replace(/\s*срок\s+хранения[^.\n]*\.?/gi, '')
     .replace(/\s+/g, ' ')
     .trim();
-  const storageText = [baseStorage, `Срок хранения ${shelfHours} часа.`].filter(Boolean).join(' ');
+  const storageText = [baseStorage, `Срок хранения ${shelfHours} часа.`].filter(Boolean).join('\n');
 
   return {
     name: dish.name || '',
@@ -95,7 +95,9 @@ export function normalizeDishForLabel(dish, settings, dt) {
     brand: resolveBrand(settings), // { name, logo, tagline, color }
     fontScale: Number(settings['brand.fontScale']) || 1,
     dietType: resolveDietType(dish), // 'pp' | 'classic'
-    dietTypeLabel: dietTypeLabel(dish), // 'ПП' | 'Классический'
+    dietTypeLabel: dietTypeLabel(dish), // 'ПП' | 'Классический' (для кнопок в UI)
+    dietTypeLabelFull:
+      resolveDietType(dish) === 'pp' ? 'Правильное питание' : 'Классическое питание',
     showDietType: settings['label.showDietType'] !== false,
   };
 }
