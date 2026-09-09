@@ -221,13 +221,15 @@ function drawVector(ctx, opts) {
   const botTop = bottomOfContent - botH;
   const midTop = botTop - 1.6 - 1.8 - midH;
 
-  // --- название: по центру полосы между шапкой и mid-блоком ---
+  // --- название: по центру полосы между шапкой и mid-блоком.
+  // Название печатается ПОЛНОСТЬЮ: до 6 строк, шрифт ужимается до 1.9 мм,
+  // «…» практически не появляется. ---
   cap('Название блюда', xR0, y);
   const nameTop = y + 2.6;
   const nameBottom = midTop - 2.4;
-  let nf = fit(data.name || '—', rW, 3, 4.4, 2.4, true);
-  while (nf.size > 2.4 && nf.lines.length * nf.size * 1.14 > nameBottom - nameTop) {
-    nf = fit(data.name || '—', rW, 3, nf.size - 0.15, 2.4, true);
+  let nf = fit(data.name || '—', rW, 6, 4.4, 1.9, true);
+  while (nf.size > 1.9 && nf.lines.length * nf.size * 1.14 > nameBottom - nameTop) {
+    nf = fit(data.name || '—', rW, 6, nf.size - 0.15, 1.9, true);
   }
   const blockH = nf.lines.length * nf.size * 1.14;
   const nameY = nameTop + Math.max(0, (nameBottom - nameTop - blockH) / 2);

@@ -11,11 +11,12 @@ export const DEFAULT_SHELF_HOURS = 42;
 
 // Совпадение по характерной части названия — работает и для «Горячее из курицы»,
 // и для «Горячие из курицы» (в iiko-шаблоне написание непоследовательное).
+// hideShelf: у горячего строку «Срок хранения» не печатаем.
 const RULES = [
-  { match: 'из говядины', weight: '340 г', time: '00:05' },
-  { match: 'из индейки', weight: '360 г', time: '00:10' },
-  { match: 'из курицы', weight: '340 г', time: '00:25' },
-  { match: 'из рыбы', weight: '320 г', time: '00:15' },
+  { match: 'из говядины', weight: '340 г', time: '00:05', hideShelf: true },
+  { match: 'из индейки', weight: '360 г', time: '00:10', hideShelf: true },
+  { match: 'из курицы', weight: '340 г', time: '00:25', hideShelf: true },
+  { match: 'из рыбы', weight: '320 г', time: '00:15', hideShelf: true },
   { match: 'десерт', weight: '170 г', time: '00:45', shelfHours: 72 },
   { match: 'завтрак', weight: '150 г', time: '01:00' },
   { match: 'напит', weight: '500 мл', time: '01:10', shelfHours: 72 },
@@ -36,7 +37,12 @@ export function resolveTicketRule(category, group) {
   const hay = norm(category) + ' | ' + norm(group);
   for (const r of RULES) {
     if (hay.includes(r.match)) {
-      return { weight: r.weight, time: r.time, shelfHours: r.shelfHours || DEFAULT_SHELF_HOURS };
+      return {
+        weight: r.weight,
+        time: r.time,
+        shelfHours: r.shelfHours || DEFAULT_SHELF_HOURS,
+        hideShelf: r.hideShelf === true,
+      };
     }
   }
   return null;
