@@ -171,14 +171,7 @@ export default function SettingsTab() {
           Сохраняется автоматически в этом браузере, кнопка не нужна. <b>Без верного пароля
           импорт и правка блюд (в т.ч. состав) не сохраняются</b> — сервер отвечает 401.
         </p>
-        <div
-          className="banner"
-          style={{
-            marginTop: 12,
-            background: agent?.online ? '#eef8f0' : '#fdeeee',
-            border: '1px solid ' + (agent?.online ? '#bfe3c6' : '#f0c4c4'),
-          }}
-        >
+        <div className={'banner ' + (agent?.online ? 'ok' : 'err')} style={{ marginTop: 12 }}>
           Print Agent: {agent?.online ? '🟢 на связи' : '🔴 не отвечает'}
           {agent?.agent && (
             <>
