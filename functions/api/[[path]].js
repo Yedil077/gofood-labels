@@ -25,7 +25,7 @@ import {
 } from '../../web/src/shared/normalize.js';
 import { detectDietType } from '../../web/src/shared/dietType.js';
 import { Iiko } from '../../web/src/shared/iiko.js';
-import { buildNomenclatureItems } from '../../web/src/shared/iikoSync.js';
+import { buildNomenclatureItems, polishComposition } from '../../web/src/shared/iikoSync.js';
 
 
 let ADMIN_TOKEN = '';
@@ -248,6 +248,24 @@ async function route(req) {
     if (seg[0] === 'dishes') {
       const settings = await loadSettings();
       const dishes = await loadDishes();
+
+      // почистить грамматику в уже сохранённом составе (кроме ручного)
+      if (seg[1] === 'polish-composition' && method === 'POST') {
+        if (!isAdmin(req)) return denyAdmin();
+        let changed = 0;
+        for (const d of dishes) {
+          if (!d.composition || d.composition_source === 'manual') continue;
+          const p = polishComposition(d.composition);
+          if (p && p !== d.composition) {
+            d.composition = p;
+            d.updated_at = new Date().toISOString();
+            changed++;
+          }
+        }
+        if (changed) await setJSON('dishes', dishes);
+        await logEvent('info', 'dishes', `Почищен состав у ${changed} блюд`);
+        return json({ ok: true, changed });
+      }
 
       if (seg.length === 1 && method === 'GET') {
         const q = (url.searchParams.get('q') || '').trim().toLowerCase();

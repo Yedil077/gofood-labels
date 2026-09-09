@@ -76,6 +76,60 @@ export function cleanIngredient(raw) {
   return s.toLowerCase();
 }
 
+/**
+ * Правит грамматику/опечатки в готовой строке состава. Только явные, безопасные
+ * замены — ничего не додумывает. Обрабатывает по ингредиентам (разбивка по запятой).
+ */
+export function polishComposition(s) {
+  if (!s) return s;
+  const src = String(s)
+    .toLowerCase()
+    .split(',')
+    .map((x) => x.trim())
+    .filter(Boolean);
+  const out = [];
+  for (let it of src) {
+    it = it
+      // кластеры зелени -> разбить (через | -> потом отдельные позиции)
+      .replace(/укроп петрушка кинза/g, 'укроп|петрушка|кинза')
+      .replace(/петрушка укроп кинза/g, 'укроп|петрушка|кинза')
+      .replace(/укроп кинза петрушка/g, 'укроп|петрушка|кинза')
+      .replace(/кинза петрушка укроп/g, 'укроп|петрушка|кинза')
+      // грамматика / опечатки
+      .replace(/для бельгийские вафли/g, 'для бельгийских вафель')
+      .replace(/грецский/g, 'грецкий')
+      .replace(/сезон?ые/g, 'сезонные')
+      .replace(/пассированн/g, 'пассерованн')
+      .replace(/консервированый/g, 'консервированный')
+      .replace(/ и грибами$/g, ' с грибами')
+      .replace(/ и очищн\.?$/g, '')
+      .replace(/ очищн\.?$/g, ' очищенный')
+      .replace(/по-тайский/g, 'по-тайски')
+      .replace(/\+$/g, '')
+      .replace(/^кукуруза консер(в|ва)?$/g, 'кукуруза консервированная')
+      .replace(/^(паста|макароны) гранора$/g, '$1')
+      .replace(/запеченная филе/g, 'запечённое филе')
+      // служебные хвосты
+      .replace(/ для бризоля каспи$/g, '')
+      .replace(/ для бризоля$/g, '')
+      .replace(/ каспи$/g, '')
+      .replace(/ для смазки$/g, '')
+      .replace(/[-–—]\s*\d?\s*этаж\w*/g, '')
+      // «X соус» -> «соус X», дубли
+      .replace(/^соус сливочно-грибной соус$/g, 'сливочно-грибной соус')
+      .replace(/^терияки соус$/g, 'соус терияки')
+      .replace(/^свит-чили соус$/g, 'соус свит-чили')
+      .replace(/^барбекью соус$/g, 'соус барбекью')
+      .replace(/\s{2,}/g, ' ')
+      .trim();
+    for (const part of it.split('|')) {
+      const p = part.trim();
+      if (p && !out.includes(p)) out.push(p);
+    }
+  }
+  return out.join(', ');
+}
+
 function pickChart(charts, todayISO) {
   let best = null;
   for (const c of charts) {
@@ -160,11 +214,13 @@ export async function buildNomenclatureItems(iiko, settings = {}, log = () => {}
         if (cur) cur.kg += kg;
         else acc.set(low, { name: nm, kg });
       }
-      composition = [...acc.values()]
-        .sort((a, b) => b.kg - a.kg)
-        .slice(0, compMax)
-        .map((x) => x.name)
-        .join(', ');
+      composition = polishComposition(
+        [...acc.values()]
+          .sort((a, b) => b.kg - a.kg)
+          .slice(0, compMax)
+          .map((x) => x.name)
+          .join(', ')
+      );
       if (composition) compCount++;
     }
 
