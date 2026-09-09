@@ -139,7 +139,7 @@ function drawVector(ctx, opts) {
 
   /* --- логотип --- */
   const logoBoxW = xLw;
-  const logoBoxH = 21;
+  const logoBoxH = 18;
   if (logo && logo.width) {
     const r = Math.min(mm(logoBoxW) / logo.width, mm(logoBoxH) / logo.height);
     const dw = logo.width * r;
@@ -151,8 +151,26 @@ function drawVector(ctx, opts) {
     ctx.fillText('gofood', mm(xL0), mm(safeMm + 8));
   }
 
+  /* --- слоган под логотипом (листок + текст, по центру левой колонки) --- */
+  let compTop = safeMm + logoBoxH + 3;
+  if (data.brand?.tagline) {
+    const ty = safeMm + logoBoxH + 1.2;
+    const t = fit(data.brand.tagline, xLw - 3.5, 1, 2.5, 1.7, true);
+    ctx.font = font(t.size, true);
+    const twMm = ctx.measureText(t.lines[0]).width / pxPerMm;
+    const groupW = twMm + 3.4;
+    const sx = xL0 + Math.max(0, (xLw - groupW) / 2);
+    ctx.save();
+    ctx.fillStyle = brand;
+    ctx.beginPath();
+    ctx.ellipse(mm(sx + 1), mm(ty + 1.2), mm(1.2), mm(0.65), -Math.PI / 4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    text(t.lines[0], sx + 3.2, ty, t.size, { bold: true });
+    compTop = ty + Math.max(3.6, t.size * K + 1.4) + 1.6;
+  }
+
   /* --- состав (жёстко в границах, не заезжает на нижнюю плашку) --- */
-  const compTop = safeMm + logoBoxH + 3;
   const compTextTop = compTop + 6.2;
   const compBottom = stripY - 2; // не ниже нижней плашки
   text('Состав', xL0, compTop, 3.2, { bold: true });
@@ -177,27 +195,8 @@ function drawVector(ctx, opts) {
     text('—', xL0, compTextTop, 2.4, { color: GREY });
   }
 
-  /* --- правая колонка --- */
-  let y = safeMm;
-  if (data.brand?.tagline) {
-    const t = fit(data.brand.tagline, rW - 6, 1, 2.7, 1.9, true);
-    ctx.font = font(t.size, true);
-    const tw = ctx.measureText(t.lines[0]).width; // px
-    const twMm = tw / pxPerMm;
-    const groupW = twMm + 4; // листок + отступ
-    const startX = xR0 + Math.max(0, (rW - groupW) / 2); // по центру колонки
-    ctx.save();
-    ctx.fillStyle = brand;
-    ctx.beginPath();
-    ctx.ellipse(mm(startX + 1), mm(y + 1.3), mm(1.3), mm(0.7), -Math.PI / 4, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-    text(t.lines[0], startX + 3.4, y, t.size, { bold: true });
-    y += Math.max(3.2, t.size * K + 1.2);
-  } else {
-    y += 1;
-  }
-  y = Math.max(y, safeMm + 5.2);
+  /* --- правая колонка (слоган ушёл под логотип, контент поднят выше) --- */
+  let y = safeMm + 1.5;
   dotted(xR0, y, xR1, y, brand);
   // вертикальный разделитель колонок — от этой линии до нижней плашки
   ctx.save();
@@ -213,9 +212,9 @@ function drawVector(ctx, opts) {
   const cW = (rW - 3) / 2;
   const bx = xR0 + cW + 3;
 
-  // Нижние два блока привязаны к низу этикетки (над плашкой «Хранить»),
-  // чтобы не оставалось пустоты. Между ними и названием — гибкий зазор.
-  const bottomOfContent = stripY - 1.5;
+  // Нижние два блока — ближе к верху (пользователь просил приподнять
+  // название / категорию / КБЖУ / штрихкод). Между ними и названием — гибкий зазор.
+  const bottomOfContent = stripY - 4.5;
   const botH = 14; // штрихкод / дата-время
   const midH = 10.5; // категория / КБЖУ
   const botTop = bottomOfContent - botH;
