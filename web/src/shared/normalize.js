@@ -93,6 +93,7 @@ export function normalizeDishForLabel(dish, settings, dt) {
     timeStr,
     approximateTime: approximate,
     brand: resolveBrand(settings), // { name, logo, tagline, color }
+    mono: settings['label.mono'] === true, // чёрный режим — без цвета
     fontScale: Number(settings['brand.fontScale']) || 1,
     dietType: resolveDietType(dish), // 'pp' | 'classic'
     dietTypeLabel: dietTypeLabel(dish), // 'ПП' | 'Классический' (для кнопок в UI)

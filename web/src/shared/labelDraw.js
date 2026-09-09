@@ -52,7 +52,8 @@ function drawVector(ctx, opts) {
   const FF = opts.fontFamily || 'Arial, "Segoe UI", sans-serif';
   const K = data.fontScale || 1;
   const mm = (v) => v * pxPerMm;
-  const brand = data.brand?.color || '#F2661F';
+  const mono = data.mono === true;
+  const brand = mono ? '#111111' : data.brand?.color || '#F2661F';
   const GREY = '#8a8a8a';
   const LINE = '#dcdcdc';
   const INK = '#111111';
@@ -144,7 +145,9 @@ function drawVector(ctx, opts) {
     const r = Math.min(mm(logoBoxW) / logo.width, mm(logoBoxH) / logo.height);
     const dw = logo.width * r;
     const dh = logo.height * r;
+    if (mono) ctx.filter = 'grayscale(1) brightness(0)'; // логотип чёрным силуэтом
     ctx.drawImage(logo, mm(xL0), mm(safeMm), dw, dh);
+    if (mono) ctx.filter = 'none';
   } else {
     ctx.fillStyle = '#111';
     ctx.font = `bold ${mm(6)}px ${FF}`;
