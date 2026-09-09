@@ -4,6 +4,7 @@ import { resolveBrand } from './brand.js';
 import { resolveDietType, dietTypeLabel } from './dietType.js';
 import { resolveTicketRule, ticketDate, DEFAULT_SHELF_HOURS } from './priceTicket.js';
 import { groupOf } from './categories.js';
+import { kcalFromMacros, hoursWord } from './kbju.js';
 
 export const WARNING_TEXT = {
   composition: 'Не заполнен состав',
@@ -71,8 +72,12 @@ export function normalizeDishForLabel(dish, settings, dt) {
     .replace(/\s*срок\s+хранения[^.\n]*\.?/gi, '')
     .replace(/\s+/g, ' ')
     .trim();
-  const shelfLine = rule && rule.hideShelf ? '' : `Срок хранения ${shelfHours} часа.`;
+  const shelfLine =
+    rule && rule.hideShelf ? '' : `Срок хранения ${shelfHours} ${hoursWord(shelfHours)}.`;
   const storageText = [baseStorage, shelfLine].filter(Boolean).join('\n');
+
+  // Ккал: если не задано, но есть Б/Ж/У — считаем по формуле Атуотера.
+  const kcal = dish.kcal ?? kcalFromMacros(dish.protein, dish.fat, dish.carbs);
 
   return {
     name: dish.name || '',
@@ -83,7 +88,7 @@ export function normalizeDishForLabel(dish, settings, dt) {
       protein: dish.protein ?? null,
       fat: dish.fat ?? null,
       carbs: dish.carbs ?? null,
-      kcal: dish.kcal ?? null,
+      kcal: kcal ?? null,
     },
     composition: dish.composition || '',
     barcodeValue: bc.value,

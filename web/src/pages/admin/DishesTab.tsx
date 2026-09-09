@@ -6,6 +6,8 @@ import { renderLabel } from '../../label/renderBrowser';
 import { calculateLabelDateTime, localKey } from '../../shared/labelDateTime.js';
 // @ts-ignore
 import { normalizeDishForLabel } from '../../shared/normalize.js';
+// @ts-ignore
+import { kcalFromMacros } from '../../shared/kbju.js';
 import type { Dish, Settings } from '../../types';
 
 export default function DishesTab() {
@@ -227,11 +229,32 @@ function EditModal({
                     type="number"
                     value={(f as any)[k]}
                     onChange={(e) => set(k, e.target.value)}
+                    onBlur={() => {
+                      if (k === 'kcal') return;
+                      const auto = kcalFromMacros(f.protein, f.fat, f.carbs);
+                      if (auto != null && (f.kcal === '' || f.kcal == null)) set('kcal', String(auto));
+                    }}
                     style={{ width: 90 }}
                   />
                 </span>
               ))}
             </div>
+            {(() => {
+              const auto = kcalFromMacros(f.protein, f.fat, f.carbs);
+              return auto != null ? (
+                <p className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+                  По формуле Б×4 + У×4 + Ж×9 = <b>{auto}</b> ккал.{' '}
+                  <button
+                    type="button"
+                    className="btn"
+                    style={{ padding: '2px 8px', fontSize: 12 }}
+                    onClick={() => set('kcal', String(auto))}
+                  >
+                    подставить
+                  </button>
+                </p>
+              ) : null;
+            })()}
 
             <div className="split2">
               <div>

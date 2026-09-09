@@ -7,26 +7,26 @@ test('таблица категория → вес / время (реальны�
     const r = resolveTicketRule(c);
     return { weight: r.weight, time: r.time, shelfHours: r.shelfHours };
   };
-  assert.deepEqual(pick('Горячее из говядины'), { weight: '340 г', time: '00:05', shelfHours: 42 });
-  assert.deepEqual(pick('Горячее из индейки'), { weight: '360 г', time: '00:10', shelfHours: 42 });
-  assert.deepEqual(pick('Горячее из курицы'), { weight: '340 г', time: '00:25', shelfHours: 42 });
-  assert.deepEqual(pick('Горячее из рыбы'), { weight: '320 г', time: '00:15', shelfHours: 42 });
-  assert.deepEqual(pick('Горячие из курицы'), { weight: '340 г', time: '00:25', shelfHours: 42 }); // и мн. число
+  assert.deepEqual(pick('Горячее из говядины'), { weight: '340 г', time: '00:05', shelfHours: 48 });
+  assert.deepEqual(pick('Горячее из индейки'), { weight: '360 г', time: '00:10', shelfHours: 48 });
+  assert.deepEqual(pick('Горячее из курицы'), { weight: '340 г', time: '00:25', shelfHours: 48 });
+  assert.deepEqual(pick('Горячее из рыбы'), { weight: '320 г', time: '00:15', shelfHours: 48 });
+  assert.deepEqual(pick('Горячие из курицы'), { weight: '340 г', time: '00:25', shelfHours: 48 }); // и мн. число
   assert.deepEqual(pick('Десерты'), { weight: '170 г', time: '00:45', shelfHours: 72 });
-  assert.deepEqual(pick('Завтраки'), { weight: '150 г', time: '01:00', shelfHours: 42 });
+  assert.deepEqual(pick('Завтраки'), { weight: '150 г', time: '01:00', shelfHours: 48 });
   assert.deepEqual(pick('Напитки'), { weight: '500 мл', time: '01:10', shelfHours: 72 });
-  assert.deepEqual(pick('Перекусы'), { weight: '140 г', time: '01:15', shelfHours: 42 });
-  assert.deepEqual(pick('Салаты'), { weight: '160 г', time: '02:05', shelfHours: 42 });
-  assert.deepEqual(pick('Супы'), { weight: '400 г', time: '00:40', shelfHours: 42 });
+  assert.deepEqual(pick('Перекусы'), { weight: '140 г', time: '01:15', shelfHours: 48 });
+  assert.deepEqual(pick('Салаты'), { weight: '160 г', time: '02:05', shelfHours: 48 });
+  assert.deepEqual(pick('Супы'), { weight: '400 г', time: '00:40', shelfHours: 48 });
 });
 
-test('срок хранения: Десерты/Напитки 72, остальное 42; у горячего строка скрыта', () => {
+test('срок хранения: Десерты/Напитки 72, остальное 48; у горячего строка скрыта', () => {
   assert.equal(resolveTicketRule('Десерты').shelfHours, 72);
   assert.equal(resolveTicketRule('Напитки холодные').shelfHours, 72);
-  assert.equal(resolveTicketRule('Горячее из говядины').shelfHours, 42);
+  assert.equal(resolveTicketRule('Горячее из говядины').shelfHours, 48);
   assert.equal(resolveTicketRule('Горячее из курицы').hideShelf, true);
   assert.equal(resolveTicketRule('Десерты').hideShelf, false);
-  assert.equal(DEFAULT_SHELF_HOURS, 42);
+  assert.equal(DEFAULT_SHELF_HOURS, 48);
 });
 
 test('совпадение по подстроке и через группу', () => {
