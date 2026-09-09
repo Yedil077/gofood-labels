@@ -96,7 +96,6 @@ export default function SettingsTab() {
       'label.showDietType': s!['label.showDietType'] !== false,
       'label.timeMode': s!['label.timeMode'] || 'ticket',
       'label.shelfHoursDefault': Number(s!['label.shelfHoursDefault']) || 42,
-      'label.mono': !!s!['label.mono'],
       'storage.text': s!['storage.text'],
       datetime: { ...dtClean, controlExamples },
     };
@@ -385,15 +384,6 @@ export default function SettingsTab() {
             onChange={(e) => set('label.showDietType', e.target.checked)}
           />
           В блоке «Категория» показывать «Классическое питание» / «Правильное питание»
-        </label>
-
-        <label className="row" style={{ gap: 8, marginTop: 8 }}>
-          <input
-            type="checkbox"
-            checked={!!s['label.mono']}
-            onChange={(e) => set('label.mono', e.target.checked)}
-          />
-          Чёрный режим — печатать этикетку без цвета (линии, значки и логотип чёрным)
         </label>
 
         <label className="fld">Условия хранения (температурная строка)</label>

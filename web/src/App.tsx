@@ -4,8 +4,18 @@ import PrintPage from './pages/PrintPage';
 import AdminLayout from './pages/admin/AdminLayout';
 import { api } from './api';
 
+function initTheme(): 'light' | 'dark' {
+  try {
+    const t = localStorage.getItem('theme');
+    return t === 'dark' ? 'dark' : 'light';
+  } catch {
+    return 'light';
+  }
+}
+
 export default function App() {
   const [apiOk, setApiOk] = useState<boolean | null>(null);
+  const [theme, setTheme] = useState<'light' | 'dark'>(initTheme);
 
   useEffect(() => {
     api
@@ -13,6 +23,15 @@ export default function App() {
       .then(() => setApiOk(true))
       .catch(() => setApiOk(false));
   }, []);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    try {
+      localStorage.setItem('theme', theme);
+    } catch {
+      /* no-op */
+    }
+  }, [theme]);
 
   return (
     <div className="app">
@@ -28,6 +47,14 @@ export default function App() {
         <NavLink to="/admin" className={({ isActive }) => 'navlink' + (isActive ? ' active' : '')}>
           Администратор
         </NavLink>
+        <button
+          className="navlink"
+          title="Светлая / тёмная тема"
+          onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
+          style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18 }}
+        >
+          {theme === 'dark' ? '☀️' : '🌙'}
+        </button>
       </header>
 
       <main className="content">
