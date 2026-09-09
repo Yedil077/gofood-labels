@@ -137,36 +137,30 @@ function drawVector(ctx, opts) {
   // без внешней рамки — печаталась серой чертой по краю; оставлен только
   // вертикальный разделитель колонок (рисуется ниже).
 
-  /* --- логотип --- */
+  /* --- логотип: по центру левой колонки --- */
   const logoBoxW = xLw;
   const logoBoxH = 18;
   if (logo && logo.width) {
     const r = Math.min(mm(logoBoxW) / logo.width, mm(logoBoxH) / logo.height);
     const dw = logo.width * r;
     const dh = logo.height * r;
-    ctx.drawImage(logo, mm(xL0), mm(safeMm), dw, dh);
+    const lx = mm(xL0) + (mm(xLw) - dw) / 2; // центрируем по горизонтали
+    ctx.drawImage(logo, lx, mm(safeMm), dw, dh);
   } else {
     ctx.fillStyle = '#111';
     ctx.font = `bold ${mm(6)}px ${FF}`;
     ctx.fillText('gofood', mm(xL0), mm(safeMm + 8));
   }
 
-  /* --- слоган под логотипом (листок + текст, по центру левой колонки) --- */
+  /* --- слоган под логотипом: только текст, по центру (без листка) --- */
   let compTop = safeMm + logoBoxH + 3;
   if (data.brand?.tagline) {
-    const ty = safeMm + logoBoxH + 1.2;
-    const t = fit(data.brand.tagline, xLw - 3.5, 1, 2.5, 1.7, true);
+    const ty = safeMm + logoBoxH + 1.4;
+    const t = fit(data.brand.tagline, xLw, 1, 2.7, 1.7, true);
     ctx.font = font(t.size, true);
     const twMm = ctx.measureText(t.lines[0]).width / pxPerMm;
-    const groupW = twMm + 3.4;
-    const sx = xL0 + Math.max(0, (xLw - groupW) / 2);
-    ctx.save();
-    ctx.fillStyle = brand;
-    ctx.beginPath();
-    ctx.ellipse(mm(sx + 1), mm(ty + 1.2), mm(1.2), mm(0.65), -Math.PI / 4, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-    text(t.lines[0], sx + 3.2, ty, t.size, { bold: true });
+    const sx = xL0 + Math.max(0, (xLw - twMm) / 2);
+    text(t.lines[0], sx, ty, t.size, { bold: true, color: brand });
     compTop = ty + Math.max(3.6, t.size * K + 1.4) + 1.6;
   }
 
