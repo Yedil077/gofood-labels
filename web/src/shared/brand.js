@@ -14,7 +14,7 @@ export const BRAND_PRESETS = {
     name: 'GreenCity',
     logo: 'greencity',
     tagline: 'Вкусно и полезно',
-    color: '#8CC63F',
+    color: '#81D326', // фирменный зелёный greencity.kz
   },
 };
 
