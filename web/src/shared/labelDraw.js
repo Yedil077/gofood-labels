@@ -160,7 +160,7 @@ function drawVector(ctx, opts) {
     ctx.font = font(t.size, true);
     const twMm = ctx.measureText(t.lines[0]).width / pxPerMm;
     const sx = xL0 + Math.max(0, (xLw - twMm) / 2);
-    text(t.lines[0], sx, ty, t.size, { bold: true, color: brand });
+    text(t.lines[0], sx, ty, t.size, { bold: true });
     compTop = ty + Math.max(3.6, t.size * K + 1.4) + 1.6;
   }
 
