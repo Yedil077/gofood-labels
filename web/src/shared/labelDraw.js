@@ -152,9 +152,12 @@ function drawVector(ctx, opts) {
     ctx.fillText('gofood', mm(xL0), mm(safeMm + 8));
   }
 
-  /* --- слоган под логотипом: только текст, по центру (без листка) --- */
+  // GreenCity — слоган под логотипом; gofood — по-старому, сверху правой колонки.
+  const isGreenCity = (data.brand?.logo || '') === 'greencity';
+
+  /* --- слоган под логотипом (только GreenCity): текст по центру, без листка --- */
   let compTop = safeMm + logoBoxH + 3;
-  if (data.brand?.tagline) {
+  if (isGreenCity && data.brand?.tagline) {
     const ty = safeMm + logoBoxH + 1.4;
     const t = fit(data.brand.tagline, xLw, 1, 2.7, 1.7, true);
     ctx.font = font(t.size, true);
@@ -189,8 +192,24 @@ function drawVector(ctx, opts) {
     text('—', xL0, compTextTop, 2.4, { color: GREY });
   }
 
-  /* --- правая колонка (слоган ушёл под логотип, контент поднят выше) --- */
+  /* --- правая колонка --- */
   let y = safeMm + 1.5;
+  // gofood — слоган сверху правой колонки, над «Название блюда» (как раньше)
+  if (!isGreenCity && data.brand?.tagline) {
+    const t = fit(data.brand.tagline, rW - 6, 1, 2.7, 1.9, true);
+    ctx.font = font(t.size, true);
+    const twMm = ctx.measureText(t.lines[0]).width / pxPerMm;
+    const groupW = twMm + 4; // листок + отступ
+    const startX = xR0 + Math.max(0, (rW - groupW) / 2); // по центру колонки
+    ctx.save();
+    ctx.fillStyle = brand;
+    ctx.beginPath();
+    ctx.ellipse(mm(startX + 1), mm(y + 1.3), mm(1.3), mm(0.7), -Math.PI / 4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    text(t.lines[0], startX + 3.4, y, t.size, { bold: true });
+    y += Math.max(3.2, t.size * K + 1.2);
+  }
   dotted(xR0, y, xR1, y, brand);
   // вертикальный разделитель колонок — от этой линии до нижней плашки
   ctx.save();
