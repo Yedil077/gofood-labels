@@ -56,7 +56,6 @@ function drawVector(ctx, opts) {
   const GREY = '#8a8a8a';
   const LINE = '#dcdcdc';
   const INK = '#111111';
-  const GREEN_DARK = '#4C7D16'; // тёмно-зелёный для слогана GreenCity
 
   ctx.textBaseline = 'top';
   const font = (s, b) => `${b ? 'bold ' : ''}${Math.max(6, mm(s * K))}px ${FF}`;
@@ -164,7 +163,7 @@ function drawVector(ctx, opts) {
     ctx.font = font(t.size, true);
     const twMm = ctx.measureText(t.lines[0]).width / pxPerMm;
     const sx = xL0 + Math.max(0, (xLw - twMm) / 2);
-    text(t.lines[0], sx, ty, t.size, { bold: true, color: GREEN_DARK });
+    text(t.lines[0], sx, ty, t.size, { bold: true }); // чёрный, как надпись на логотипе
     compTop = ty + Math.max(3.6, t.size * K + 1.4) + 1.6;
   }
 
