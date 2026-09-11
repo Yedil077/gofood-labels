@@ -262,19 +262,19 @@ function drawVector(ctx, opts) {
   }
   cap('КБЖУ', bx, midTop);
   const k = data.kbju || {};
+  const kbjuLines = [];
   if (k.protein != null || k.fat != null || k.carbs != null || k.kcal != null) {
-    lines(
-      [
-        `Белки: ${fmtNum(k.protein)} г`,
-        `Жиры: ${fmtNum(k.fat)} г`,
-        `Углеводы: ${fmtNum(k.carbs)} г`,
-        `Ккал: ${k.kcal == null ? '—' : Math.round(k.kcal)}`,
-      ],
-      bx,
-      midTop + 2.3,
-      2.1,
-      { lh: 1.12 }
+    kbjuLines.push(
+      `Белки: ${fmtNum(k.protein)} г`,
+      `Жиры: ${fmtNum(k.fat)} г`,
+      `Углеводы: ${fmtNum(k.carbs)} г`,
+      `Ккал: ${k.kcal == null ? '—' : Math.round(k.kcal)}`
     );
+  }
+  if (data.weight) kbjuLines.push(`Вес: ${data.weight}`);
+  if (kbjuLines.length) {
+    const tight = kbjuLines.length > 4;
+    lines(kbjuLines, bx, midTop + (tight ? 2.1 : 2.3), tight ? 1.85 : 2.1, { lh: tight ? 1.08 : 1.12 });
   } else {
     text('—', bx, midTop + 2.8, 2.5, { color: GREY });
   }

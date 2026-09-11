@@ -533,6 +533,7 @@ async function route(req) {
       const local = body.clientLocal || utcShiftedKey(settings.datetime.tzOffsetMin);
       const dt = calculateLabelDateTime(local, settings.datetime);
       const label = normalizeDishForLabel(dish, settings, dt);
+      if (body.weight != null && String(body.weight).trim()) label.weight = String(body.weight).trim();
       const job = await enqueueJob({
         kind: 'label',
         quantity,

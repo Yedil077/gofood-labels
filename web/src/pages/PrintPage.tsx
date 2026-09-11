@@ -24,6 +24,7 @@ export default function PrintPage() {
   const [selSub, setSelSub] = useState('');
   const [dish, setDish] = useState<Dish | null>(null);
   const [qty, setQty] = useState(1);
+  const [weight, setWeight] = useState('');
   const [now, setNow] = useState(new Date());
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<null | { kind: 'ok' | 'err' | 'wait'; text: string; note?: string }>(null);
@@ -71,6 +72,16 @@ export default function PrintPage() {
     return normalizeDishForLabel(dish, settings, dt);
   }, [dish, settings, dt]);
 
+  // вес по умолчанию — из таблицы категорий; менеджер может поправить перед печатью
+  useEffect(() => {
+    setWeight(labelData?.weight || '');
+  }, [dish?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const printData = useMemo(
+    () => (labelData ? { ...labelData, weight } : null),
+    [labelData, weight]
+  );
+
   function openGroup(g: string) {
     setSelGroup(g);
     setSelSub('');
@@ -96,6 +107,7 @@ export default function PrintPage() {
       const r: any = await api.print({
         dishId: dish.id,
         quantity: qty,
+        weight: weight || undefined,
         ignoreWarnings,
         clientLocal: localKey(new Date()),
         user: localStorage.getItem('kitchenUser') || 'kitchen',
@@ -272,10 +284,17 @@ export default function PrintPage() {
             <label className="fld">Количество</label>
             <QuantityStepper value={qty} onChange={setQty} />
 
+            <label className="fld">Вес порции</label>
+            <input
+              value={weight}
+              onChange={(e) => setWeight(e.target.value)}
+              placeholder="например, 200 г"
+            />
+
             <div style={{ marginTop: 18 }}>
               <button
                 className="btn primary big"
-                onClick={() => labelData && printViaBrowser(labelData, rp as any, qty)}
+                onClick={() => printData && printViaBrowser(printData, rp as any, qty)}
               >
                 🖨 ПЕЧАТЬ{qty > 1 ? ` · ${qty} шт.` : ''}
               </button>
@@ -305,7 +324,7 @@ export default function PrintPage() {
             )}
           </div>
 
-          {labelData && <LabelPreview data={labelData} rp={rp} />}
+          {printData && <LabelPreview data={printData} rp={rp} />}
         </div>
       )}
 

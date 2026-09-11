@@ -48,8 +48,14 @@ export const api = {
   importBatches: () => req<{ batches: any[] }>('/import/batches'),
   clearKbju: () => req<{ ok: boolean; cleared: number }>('/import/kbju', { method: 'DELETE' }),
 
-  print: (body: { dishId: number; quantity: number; ignoreWarnings?: boolean; clientLocal?: string; user?: string }) =>
-    req('/print', { method: 'POST', body: JSON.stringify(body) }),
+  print: (body: {
+    dishId: number;
+    quantity: number;
+    weight?: string;
+    ignoreWarnings?: boolean;
+    clientLocal?: string;
+    user?: string;
+  }) => req('/print', { method: 'POST', body: JSON.stringify(body) }),
   testPrint: (copies = 1) =>
     req('/print/test', { method: 'POST', body: JSON.stringify({ copies }) }),
 
