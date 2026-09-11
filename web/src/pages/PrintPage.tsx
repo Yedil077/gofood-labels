@@ -308,16 +308,16 @@ export default function PrintPage() {
                     Авто <span className="muted">({labelData?.dietTypeLabel})</span>
                   </button>
                   <button
-                    className={'chip' + (dietOverride === 'pp' ? ' active' : '')}
-                    onClick={() => setDietOverride('pp')}
-                  >
-                    ПП
-                  </button>
-                  <button
                     className={'chip' + (dietOverride === 'classic' ? ' active' : '')}
                     onClick={() => setDietOverride('classic')}
                   >
-                    Классический
+                    Классическое питание
+                  </button>
+                  <button
+                    className={'chip' + (dietOverride === 'pp' ? ' active' : '')}
+                    onClick={() => setDietOverride('pp')}
+                  >
+                    Правильное питание
                   </button>
                 </div>
               </>
