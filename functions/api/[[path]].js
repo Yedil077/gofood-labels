@@ -534,6 +534,10 @@ async function route(req) {
       const dt = calculateLabelDateTime(local, settings.datetime);
       const label = normalizeDishForLabel(dish, settings, dt);
       if (body.weight != null && String(body.weight).trim()) label.weight = String(body.weight).trim();
+      if (body.dietType === 'pp' || body.dietType === 'classic') {
+        label.dietType = body.dietType;
+        label.dietTypeLabelFull = body.dietType === 'pp' ? 'Правильное питание' : 'Классическое питание';
+      }
       const job = await enqueueJob({
         kind: 'label',
         quantity,

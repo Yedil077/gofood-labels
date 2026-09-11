@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import DishSearch from '../components/DishSearch';
 import QuantityStepper from '../components/QuantityStepper';
+import WeightStepper from '../components/WeightStepper';
 import LabelPreview from '../components/LabelPreview';
 import WarningsPanel from '../components/WarningsPanel';
 import { api } from '../api';
@@ -25,6 +26,7 @@ export default function PrintPage() {
   const [dish, setDish] = useState<Dish | null>(null);
   const [qty, setQty] = useState(1);
   const [weight, setWeight] = useState('');
+  const [dietOverride, setDietOverride] = useState<'auto' | 'pp' | 'classic'>('auto');
   const [now, setNow] = useState(new Date());
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<null | { kind: 'ok' | 'err' | 'wait'; text: string; note?: string }>(null);
@@ -72,14 +74,24 @@ export default function PrintPage() {
     return normalizeDishForLabel(dish, settings, dt);
   }, [dish, settings, dt]);
 
-  // вес по умолчанию — из таблицы категорий; менеджер может поправить перед печатью
+  // вес по умолчанию — из таблицы категорий; тип питания — авто-детект.
+  // Менеджер может поправить оба перед печатью, для конкретного тиража.
   useEffect(() => {
     setWeight(labelData?.weight || '');
+    setDietOverride('auto');
   }, [dish?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const dietTypeLabelFull =
+    dietOverride === 'pp'
+      ? 'Правильное питание'
+      : dietOverride === 'classic'
+      ? 'Классическое питание'
+      : labelData?.dietTypeLabelFull;
+  const dietType = dietOverride === 'auto' ? labelData?.dietType : dietOverride;
+
   const printData = useMemo(
-    () => (labelData ? { ...labelData, weight } : null),
-    [labelData, weight]
+    () => (labelData ? { ...labelData, weight, dietType, dietTypeLabelFull } : null),
+    [labelData, weight, dietType, dietTypeLabelFull]
   );
 
   function openGroup(g: string) {
@@ -108,6 +120,7 @@ export default function PrintPage() {
         dishId: dish.id,
         quantity: qty,
         weight: weight || undefined,
+        dietType: dietOverride === 'auto' ? undefined : dietOverride,
         ignoreWarnings,
         clientLocal: localKey(new Date()),
         user: localStorage.getItem('kitchenUser') || 'kitchen',
@@ -284,12 +297,34 @@ export default function PrintPage() {
             <label className="fld">Количество</label>
             <QuantityStepper value={qty} onChange={setQty} />
 
+            {labelData?.showDietType && (
+              <>
+                <label className="fld">Категория</label>
+                <div className="chips" style={{ marginBottom: 4 }}>
+                  <button
+                    className={'chip' + (dietOverride === 'auto' ? ' active' : '')}
+                    onClick={() => setDietOverride('auto')}
+                  >
+                    Авто <span className="muted">({labelData?.dietTypeLabel})</span>
+                  </button>
+                  <button
+                    className={'chip' + (dietOverride === 'pp' ? ' active' : '')}
+                    onClick={() => setDietOverride('pp')}
+                  >
+                    ПП
+                  </button>
+                  <button
+                    className={'chip' + (dietOverride === 'classic' ? ' active' : '')}
+                    onClick={() => setDietOverride('classic')}
+                  >
+                    Классический
+                  </button>
+                </div>
+              </>
+            )}
+
             <label className="fld">Вес порции</label>
-            <input
-              value={weight}
-              onChange={(e) => setWeight(e.target.value)}
-              placeholder="например, 200 г"
-            />
+            <WeightStepper value={weight} onChange={setWeight} placeholder="например, 200 г" />
 
             <div style={{ marginTop: 18 }}>
               <button

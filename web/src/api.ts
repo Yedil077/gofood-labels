@@ -52,6 +52,7 @@ export const api = {
     dishId: number;
     quantity: number;
     weight?: string;
+    dietType?: 'pp' | 'classic';
     ignoreWarnings?: boolean;
     clientLocal?: string;
     user?: string;
