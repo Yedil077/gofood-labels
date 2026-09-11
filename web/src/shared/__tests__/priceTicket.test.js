@@ -41,9 +41,16 @@ test('категория вне таблицы -> null', () => {
   assert.equal(resolveTicketRule(null), null);
 });
 
-test('ticketDate = дата + 1 день', () => {
+test('ticketDate = дата + 1 день (по умолчанию, «Завтрашний день»)', () => {
   assert.equal(ticketDate(new Date(2026, 8, 9, 14, 0)), '10.09.2026');
   assert.equal(ticketDate('2026-09-30 23:00'), '01.10.2026');
   assert.equal(ticketDate('2026-12-31 10:00'), '01.01.2027');
   assert.match(ticketDate(), /^\d{2}\.\d{2}\.\d{4}$/); // без аргумента — от текущей даты
+});
+
+test('ticketDate с offsetDays=0 — «Сегодняшний день», дата не сдвигается', () => {
+  assert.equal(ticketDate(new Date(2026, 8, 9, 14, 0), 0), '09.09.2026');
+  assert.equal(ticketDate('2026-09-30 23:00', 0), '30.09.2026');
+  assert.equal(ticketDate('2026-12-31 10:00', 0), '31.12.2026');
+  assert.equal(ticketDate(new Date(2026, 8, 9, 14, 0), 1), '10.09.2026'); // явный +1 — как раньше
 });

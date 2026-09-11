@@ -95,6 +95,7 @@ export default function SettingsTab() {
       'brand.fontScale': Number(s!['brand.fontScale']) || 1,
       'label.showDietType': s!['label.showDietType'] !== false,
       'label.timeMode': s!['label.timeMode'] || 'ticket',
+      'label.ticketDay': s!['label.ticketDay'] || 'tomorrow',
       'label.shelfHoursDefault': Number(s!['label.shelfHoursDefault']) || 42,
       'storage.text': s!['storage.text'],
       datetime: { ...dtClean, controlExamples },
@@ -393,9 +394,28 @@ export default function SettingsTab() {
 
         <label className="fld">Как считать дату и время</label>
         <select value={s['label.timeMode'] || 'ticket'} onChange={(e) => set('label.timeMode', e.target.value)}>
-          <option value="ticket">По категории (как в iiko-ценнике): дата = завтра, время из таблицы</option>
+          <option value="ticket">По категории (как в iiko-ценнике): дата по варианту ниже, время из таблицы</option>
           <option value="formula">Расчёт из контрольных примеров (старый режим)</option>
         </select>
+
+        {(s['label.timeMode'] || 'ticket') === 'ticket' && (
+          <>
+            <label className="fld">Вариант этикетки по дате изготовления</label>
+            <select
+              value={s['label.ticketDay'] || 'tomorrow'}
+              onChange={(e) => set('label.ticketDay', e.target.value)}
+              style={{ maxWidth: 420 }}
+            >
+              <option value="today">Сегодняшний день — дата = текущий день</option>
+              <option value="tomorrow">Завтрашний день — дата = текущий день + 1</option>
+            </select>
+            <p className="muted" style={{ fontSize: 12 }}>
+              Два iiko-шаблона ценника. Меняется <b>только дата изготовления</b>; вес, время
+              изготовления и срок хранения по категориям в обоих вариантах одинаковы.
+            </p>
+          </>
+        )}
+
         <div className="row wrap" style={{ marginTop: 8 }}>
           <div>
             <label className="fld">Срок хранения по умолчанию, ч</label>

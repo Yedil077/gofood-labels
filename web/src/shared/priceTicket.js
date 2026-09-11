@@ -4,7 +4,9 @@
  *
  * Сопоставление — по вхождению строки в название категории (как IndexOf в iiko):
  * регистр и лишние пробелы игнорируются, первое совпадение выигрывает.
- * Дата на этикетке — всегда СЛЕДУЮЩИЙ день (текущая дата + 1).
+ * Дата на этикетке — текущая дата + `offsetDays` (см. ticketDate). По умолчанию +1
+ * («Завтрашний день»), в настройках можно выбрать 0 («Сегодняшний день»). Вес и
+ * время изготовления по категориям в обоих вариантах одинаковы.
  */
 
 export const DEFAULT_SHELF_HOURS = 48;
@@ -48,14 +50,19 @@ export function resolveTicketRule(category, group) {
   return null;
 }
 
-/** Дата этикетки = дата `now` + 1 день, «dd.MM.yyyy». `now` — Date, ISO/локальная строка или пусто. */
-export function ticketDate(now) {
+/**
+ * Дата этикетки = дата `now` + `offsetDays`, «dd.MM.yyyy».
+ * `now` — Date, ISO/локальная строка или пусто. `offsetDays` по умолчанию 1
+ * (шаблон iiko «Завтрашний день»); 0 — шаблон «Сегодняшний день».
+ */
+export function ticketDate(now, offsetDays = 1) {
   let d = now instanceof Date ? now : null;
   if (!d && typeof now === 'string') {
     const m = now.match(/^(\d{4})-(\d{2})-(\d{2})/);
     if (m) d = new Date(+m[1], +m[2] - 1, +m[3]);
   }
   if (!d || Number.isNaN(d.getTime())) d = new Date();
-  const t = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1);
+  const n = Number.isFinite(offsetDays) ? offsetDays : 1;
+  const t = new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
   return `${pad2(t.getDate())}.${pad2(t.getMonth() + 1)}.${t.getFullYear()}`;
 }

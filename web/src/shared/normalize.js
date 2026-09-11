@@ -61,7 +61,9 @@ export function normalizeDishForLabel(dish, settings, dt) {
   let timeStr = dt?.time || '';
   let approximate = !!dt?.approximate;
   if (ticketMode) {
-    dateStr = ticketDate(dt?.now);
+    // Вариант ценника по дате: 'today' → дата = текущий день; иначе (по умолчанию) → +1 день.
+    const dayOffset = (settings['label.ticketDay'] || 'tomorrow') === 'today' ? 0 : 1;
+    dateStr = ticketDate(dt?.now, dayOffset);
     timeStr = rule ? rule.time : '';
     approximate = false;
   }
