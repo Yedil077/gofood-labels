@@ -262,19 +262,25 @@ function drawVector(ctx, opts) {
   }
   cap('КБЖУ', bx, midTop);
   const k = data.kbju || {};
-  const kbjuLines = [];
+  const kSize = 2.1;
+  const weightTxt = data.weight ? `Вес: ${data.weight}` : '';
   if (k.protein != null || k.fat != null || k.carbs != null || k.kcal != null) {
-    kbjuLines.push(
-      `Белки: ${fmtNum(k.protein)} г`,
-      `Жиры: ${fmtNum(k.fat)} г`,
-      `Углеводы: ${fmtNum(k.carbs)} г`,
-      `Ккал: ${k.kcal == null ? '—' : Math.round(k.kcal)}`
+    // Б/Ж/У построчно, «Ккал» и «Вес» — в один ряд (вес сбоку, у правого края)
+    const kcalY = lines(
+      [`Белки: ${fmtNum(k.protein)} г`, `Жиры: ${fmtNum(k.fat)} г`, `Углеводы: ${fmtNum(k.carbs)} г`],
+      bx,
+      midTop + 2.3,
+      kSize,
+      { lh: 1.12 }
     );
-  }
-  if (data.weight) kbjuLines.push(`Вес: ${data.weight}`);
-  if (kbjuLines.length) {
-    const tight = kbjuLines.length > 4;
-    lines(kbjuLines, bx, midTop + (tight ? 2.1 : 2.3), tight ? 1.85 : 2.1, { lh: tight ? 1.08 : 1.12 });
+    text(`Ккал: ${k.kcal == null ? '—' : Math.round(k.kcal)}`, bx, kcalY, kSize, {});
+    if (weightTxt) {
+      ctx.font = font(kSize, false);
+      const wMm = ctx.measureText(weightTxt).width / pxPerMm;
+      text(weightTxt, xR1 - wMm, kcalY, kSize, {});
+    }
+  } else if (weightTxt) {
+    text(weightTxt, bx, midTop + 2.8, 2.5, {});
   } else {
     text('—', bx, midTop + 2.8, 2.5, { color: GREY });
   }
