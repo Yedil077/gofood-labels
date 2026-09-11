@@ -265,22 +265,33 @@ function drawVector(ctx, opts) {
   const kSize = 2.1;
   const weightTxt = data.weight ? `Вес: ${data.weight}` : '';
   if (k.protein != null || k.fat != null || k.carbs != null || k.kcal != null) {
-    // Б/Ж/У построчно, «Ккал» и «Вес» — в один ряд (вес сбоку, у правого края)
-    const kcalY = lines(
-      [`Белки: ${fmtNum(k.protein)} г`, `Жиры: ${fmtNum(k.fat)} г`, `Углеводы: ${fmtNum(k.carbs)} г`],
-      bx,
-      midTop + 2.3,
-      kSize,
-      { lh: 1.12 }
-    );
-    text(`Ккал: ${k.kcal == null ? '—' : Math.round(k.kcal)}`, bx, kcalY, kSize, {});
+    // Б/Ж/У/Ккал построчно слева; «Вес» — крупнее и жирнее, сбоку по центру блока
+    const firstY = midTop + 2.3;
+    const rowH = kSize * K * 1.12;
+    const macroLines = [
+      `Белки: ${fmtNum(k.protein)} г`,
+      `Жиры: ${fmtNum(k.fat)} г`,
+      `Углеводы: ${fmtNum(k.carbs)} г`,
+    ];
+    lines([...macroLines, `Ккал: ${k.kcal == null ? '—' : Math.round(k.kcal)}`], bx, firstY, kSize, { lh: 1.12 });
     if (weightTxt) {
+      let wSize = 2.8;
+      ctx.font = font(wSize, true);
+      let wMm = ctx.measureText(weightTxt).width / pxPerMm;
+      // не даём «Весу» наезжать на длинные значения Б/Ж/У (редкий случай трёхзначных чисел)
       ctx.font = font(kSize, false);
-      const wMm = ctx.measureText(weightTxt).width / pxPerMm;
-      text(weightTxt, xR1 - wMm, kcalY, kSize, {});
+      const maxRowMm = Math.max(...macroLines.map((s) => ctx.measureText(s).width / pxPerMm));
+      while (wSize > 2.1 && bx + maxRowMm + 1.5 > xR1 - wMm) {
+        wSize = Math.round((wSize - 0.1) * 10) / 10;
+        ctx.font = font(wSize, true);
+        wMm = ctx.measureText(weightTxt).width / pxPerMm;
+      }
+      const blockCenterY = firstY + (4 * rowH) / 2;
+      const wy = blockCenterY - (wSize * K * 1.12) / 2;
+      text(weightTxt, xR1 - wMm, wy, wSize, { bold: true });
     }
   } else if (weightTxt) {
-    text(weightTxt, bx, midTop + 2.8, 2.5, {});
+    text(weightTxt, bx, midTop + 2.8, 2.5, { bold: true });
   } else {
     text('—', bx, midTop + 2.8, 2.5, { color: GREY });
   }
