@@ -2,7 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api } from '../../api';
 import { renderLabel } from '../../label/renderBrowser';
-import { getLabelLayout } from '../../config';
+import { getLabelSizeId } from '../../config';
+// @ts-ignore
+import { labelSizeById, labelSizeFor } from '../../shared/labelSizes.js';
 // @ts-ignore
 import { calculateLabelDateTime, localKey } from '../../shared/labelDateTime.js';
 // @ts-ignore
@@ -148,6 +150,10 @@ function EditModal({
   onSave: (p: Partial<Dish>) => void;
   onClose: () => void;
 }) {
+  // превью в том же размере, что выбран на экране печати
+  const prevSize =
+    labelSizeById(getLabelSizeId()) ||
+    labelSizeFor(Number(settings['label.widthMm']) || 80, Number(settings['label.heightMm']) || 50);
   const [f, setF] = useState({
     name: dish.name,
     category: dish.category || '',
@@ -186,10 +192,10 @@ function EditModal({
       barcode_source: f.barcode_source || null,
       diet_type: f.diet_type || null,
     };
-    const data = { ...normalizeDishForLabel(merged, settings, dt), layout: getLabelLayout() };
+    const data = normalizeDishForLabel(merged, settings, dt);
     renderLabel(canvasRef.current, data, {
-      widthMm: Number(settings['label.widthMm']) || 80,
-      heightMm: Number(settings['label.heightMm']) || 50,
+      widthMm: prevSize.widthMm,
+      heightMm: prevSize.heightMm,
       dpi: Number(settings['label.dpi']) || 300,
       safeMm: Number(settings['label.safeMm']) || 3,
       symbology: settings['barcode.symbology'] || 'code128',
@@ -340,7 +346,7 @@ function EditModal({
               className="preview-frame"
               style={{
                 width: '100%',
-                aspectRatio: `${Number(settings['label.widthMm']) || 80} / ${Number(settings['label.heightMm']) || 50}`,
+                aspectRatio: `${prevSize.widthMm} / ${prevSize.heightMm}`,
               }}
             >
               <canvas ref={canvasRef} style={{ width: '100%', height: '100%', display: 'block' }} />

@@ -19,17 +19,17 @@ export function setToken(t: string) {
     /* no-op */
   }
 }
-/** Выбранный макет этикетки 80×50 (1 | 2). Хранится в браузере, как тема. */
-export function getLabelLayout(): 1 | 2 {
+/** Выбранный размер этикетки ('80x50' | '100x70'), хранится в браузере, как тема. '' — не выбран. */
+export function getLabelSizeId(): string {
   try {
-    return localStorage.getItem('labelLayout') === '2' ? 2 : 1;
+    return localStorage.getItem('labelSize') || '';
   } catch {
-    return 1;
+    return '';
   }
 }
-export function setLabelLayout(v: 1 | 2) {
+export function setLabelSizeId(v: string) {
   try {
-    localStorage.setItem('labelLayout', String(v));
+    localStorage.setItem('labelSize', v);
   } catch {
     /* no-op */
   }

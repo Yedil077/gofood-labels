@@ -53,7 +53,7 @@ export const api = {
     quantity: number;
     weight?: string;
     dietType?: 'pp' | 'classic';
-    layout?: 1 | 2;
+    labelSize?: string;
     ignoreWarnings?: boolean;
     clientLocal?: string;
     user?: string;

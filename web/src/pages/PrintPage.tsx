@@ -6,7 +6,9 @@ import WeightStepper from '../components/WeightStepper';
 import LabelPreview from '../components/LabelPreview';
 import WarningsPanel from '../components/WarningsPanel';
 import { api } from '../api';
-import { getLabelLayout, setLabelLayout } from '../config';
+import { getLabelSizeId, setLabelSizeId } from '../config';
+// @ts-ignore
+import { LABEL_SIZES, labelSizeById, labelSizeFor } from '../shared/labelSizes.js';
 // @ts-ignore
 import { calculateLabelDateTime, localKey } from '../shared/labelDateTime.js';
 // @ts-ignore
@@ -28,8 +30,8 @@ export default function PrintPage() {
   const [qty, setQty] = useState(1);
   const [weight, setWeight] = useState('');
   const [dietOverride, setDietOverride] = useState<'auto' | 'pp' | 'classic'>('auto');
-  const [layout, setLayout] = useState<1 | 2>(getLabelLayout);
-  useEffect(() => setLabelLayout(layout), [layout]);
+  // размер этикетки: выбор на этом экране (запоминается в браузере); по умолчанию — из настроек
+  const [sizeId, setSizeId] = useState<string>(getLabelSizeId);
   const [now, setNow] = useState(new Date());
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<null | { kind: 'ok' | 'err' | 'wait'; text: string; note?: string }>(null);
@@ -49,16 +51,24 @@ export default function PrintPage() {
   const dtCfg = settings?.datetime;
   const dt = useMemo(() => (dtCfg ? calculateLabelDateTime(localKey(now), dtCfg) : null), [dtCfg, now]);
 
+  const size =
+    labelSizeById(sizeId) ||
+    labelSizeFor(Number(settings?.['label.widthMm']) || 80, Number(settings?.['label.heightMm']) || 50);
+  function chooseSize(id: string) {
+    setSizeId(id);
+    setLabelSizeId(id);
+  }
+
   const rp = useMemo(
     () => ({
-      widthMm: Number(settings?.['label.widthMm']) || 80,
-      heightMm: Number(settings?.['label.heightMm']) || 50,
+      widthMm: size.widthMm,
+      heightMm: size.heightMm,
       dpi: Number(settings?.['label.dpi']) || 300,
       safeMm: Number(settings?.['label.safeMm']) || 3,
       symbology: settings?.['barcode.symbology'] || 'code128',
       brandColor: settings?.['brand.primaryColor'] || '#F2661F',
     }),
-    [settings]
+    [settings, size.widthMm, size.heightMm]
   );
 
   const tree = useMemo(() => buildTree(dishes), [dishes]);
@@ -93,11 +103,9 @@ export default function PrintPage() {
   const dietType = dietOverride === 'auto' ? labelData?.dietType : dietOverride;
 
   const printData = useMemo(
-    () => (labelData ? { ...labelData, weight, dietType, dietTypeLabelFull, layout } : null),
-    [labelData, weight, dietType, dietTypeLabelFull, layout]
+    () => (labelData ? { ...labelData, weight, dietType, dietTypeLabelFull } : null),
+    [labelData, weight, dietType, dietTypeLabelFull]
   );
-  // классический макет рисуется только на старом носителе 100×70 — тогда переключатель не нужен
-  const compactMedia = !(rp.widthMm >= 95 && rp.heightMm >= 65);
 
   function openGroup(g: string) {
     setSelGroup(g);
@@ -126,7 +134,7 @@ export default function PrintPage() {
         quantity: qty,
         weight: weight || undefined,
         dietType: dietOverride === 'auto' ? undefined : dietOverride,
-        layout,
+        labelSize: size.id,
         ignoreWarnings,
         clientLocal: localKey(new Date()),
         user: localStorage.getItem('kitchenUser') || 'kitchen',
@@ -300,19 +308,18 @@ export default function PrintPage() {
               <WarningsPanel warnings={dish.warnings} />
             </div>
 
-            {compactMedia && (
-              <>
-                <label className="fld">Макет этикетки</label>
-                <div className="chips" style={{ marginBottom: 4 }}>
-                  <button className={'chip' + (layout === 1 ? ' active' : '')} onClick={() => setLayout(1)}>
-                    Макет 1
-                  </button>
-                  <button className={'chip' + (layout === 2 ? ' active' : '')} onClick={() => setLayout(2)}>
-                    Макет 2
-                  </button>
-                </div>
-              </>
-            )}
+            <label className="fld">Размер этикетки</label>
+            <div className="chips" style={{ marginBottom: 4 }}>
+              {LABEL_SIZES.map((s: any) => (
+                <button
+                  key={s.id}
+                  className={'chip' + (size.id === s.id ? ' active' : '')}
+                  onClick={() => chooseSize(s.id)}
+                >
+                  {s.title}
+                </button>
+              ))}
+            </div>
 
             <label className="fld">Количество</label>
             <QuantityStepper value={qty} onChange={setQty} />

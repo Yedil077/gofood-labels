@@ -24,6 +24,7 @@ import {
   WARNING_TEXT,
 } from '../../web/src/shared/normalize.js';
 import { detectDietType } from '../../web/src/shared/dietType.js';
+import { labelSizeById } from '../../web/src/shared/labelSizes.js';
 import { Iiko } from '../../web/src/shared/iiko.js';
 import { buildNomenclatureItems, polishComposition } from '../../web/src/shared/iikoSync.js';
 
@@ -538,14 +539,20 @@ async function route(req) {
         label.dietType = body.dietType;
         label.dietTypeLabelFull = body.dietType === 'pp' ? 'Правильное питание' : 'Классическое питание';
       }
-      label.layout = Number(body.layout) === 2 ? 2 : 1; // макет этикетки 80×50, выбранный на экране печати
+      // размер этикетки, выбранный на экране печати (80×50 / 100×70)
+      const render = renderParams(settings);
+      const chosen = labelSizeById(body.labelSize);
+      if (chosen) {
+        render.widthMm = chosen.widthMm;
+        render.heightMm = chosen.heightMm;
+      }
       const job = await enqueueJob({
         kind: 'label',
         quantity,
         user: body.user || 'kitchen',
         dish: { id: dish.id, name: dish.name, code: dish.code, artikul: dish.artikul },
         label,
-        render: renderParams(settings),
+        render,
         labelDate: label.dateStr,
         labelTime: label.timeStr,
         approximateTime: label.approximateTime,
