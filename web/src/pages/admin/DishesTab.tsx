@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api } from '../../api';
 import { renderLabel } from '../../label/renderBrowser';
+import { getLabelLayout } from '../../config';
 // @ts-ignore
 import { calculateLabelDateTime, localKey } from '../../shared/labelDateTime.js';
 // @ts-ignore
@@ -185,10 +186,10 @@ function EditModal({
       barcode_source: f.barcode_source || null,
       diet_type: f.diet_type || null,
     };
-    const data = normalizeDishForLabel(merged, settings, dt);
+    const data = { ...normalizeDishForLabel(merged, settings, dt), layout: getLabelLayout() };
     renderLabel(canvasRef.current, data, {
-      widthMm: Number(settings['label.widthMm']) || 100,
-      heightMm: Number(settings['label.heightMm']) || 70,
+      widthMm: Number(settings['label.widthMm']) || 80,
+      heightMm: Number(settings['label.heightMm']) || 50,
       dpi: Number(settings['label.dpi']) || 300,
       safeMm: Number(settings['label.safeMm']) || 3,
       symbology: settings['barcode.symbology'] || 'code128',
@@ -339,7 +340,7 @@ function EditModal({
               className="preview-frame"
               style={{
                 width: '100%',
-                aspectRatio: `${Number(settings['label.widthMm']) || 100} / ${Number(settings['label.heightMm']) || 70}`,
+                aspectRatio: `${Number(settings['label.widthMm']) || 80} / ${Number(settings['label.heightMm']) || 50}`,
               }}
             >
               <canvas ref={canvasRef} style={{ width: '100%', height: '100%', display: 'block' }} />

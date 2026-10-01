@@ -9,9 +9,10 @@ export const DEFAULTS = {
   'print.scale': 'noscale', // 'noscale' | 'fit' | 'shrink'
   'print.defaultCopies': 1,
 
-  // Геометрия этикетки (физический носитель — 100×70 мм, альбомный)
-  'label.widthMm': 100,
-  'label.heightMm': 70,
+  // Геометрия этикетки (физический носитель — 80×50 мм, альбомный: ширина 80, высота 50).
+  // Носитель ≥ 95×65 (старый 100×70) автоматически рисуется классическим макетом.
+  'label.widthMm': 80,
+  'label.heightMm': 50,
   'label.dpi': 300,
   'label.printRotationDeg': 0,
   'label.safeMm': 3,

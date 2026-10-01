@@ -538,6 +538,7 @@ async function route(req) {
         label.dietType = body.dietType;
         label.dietTypeLabelFull = body.dietType === 'pp' ? 'Правильное питание' : 'Классическое питание';
       }
+      label.layout = Number(body.layout) === 2 ? 2 : 1; // макет этикетки 80×50, выбранный на экране печати
       const job = await enqueueJob({
         kind: 'label',
         quantity,
@@ -723,8 +724,8 @@ async function route(req) {
 
 function renderParams(settings) {
   return {
-    widthMm: Number(settings['label.widthMm']) || 100,
-    heightMm: Number(settings['label.heightMm']) || 70,
+    widthMm: Number(settings['label.widthMm']) || 80,
+    heightMm: Number(settings['label.heightMm']) || 50,
     dpi: Number(settings['label.dpi']) || 300,
     printRotationDeg: Number(settings['label.printRotationDeg']) || 0,
     safeMm: Number(settings['label.safeMm']) || 3,

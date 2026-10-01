@@ -6,6 +6,7 @@ import WeightStepper from '../components/WeightStepper';
 import LabelPreview from '../components/LabelPreview';
 import WarningsPanel from '../components/WarningsPanel';
 import { api } from '../api';
+import { getLabelLayout, setLabelLayout } from '../config';
 // @ts-ignore
 import { calculateLabelDateTime, localKey } from '../shared/labelDateTime.js';
 // @ts-ignore
@@ -27,6 +28,8 @@ export default function PrintPage() {
   const [qty, setQty] = useState(1);
   const [weight, setWeight] = useState('');
   const [dietOverride, setDietOverride] = useState<'auto' | 'pp' | 'classic'>('auto');
+  const [layout, setLayout] = useState<1 | 2>(getLabelLayout);
+  useEffect(() => setLabelLayout(layout), [layout]);
   const [now, setNow] = useState(new Date());
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<null | { kind: 'ok' | 'err' | 'wait'; text: string; note?: string }>(null);
@@ -48,8 +51,8 @@ export default function PrintPage() {
 
   const rp = useMemo(
     () => ({
-      widthMm: Number(settings?.['label.widthMm']) || 100,
-      heightMm: Number(settings?.['label.heightMm']) || 70,
+      widthMm: Number(settings?.['label.widthMm']) || 80,
+      heightMm: Number(settings?.['label.heightMm']) || 50,
       dpi: Number(settings?.['label.dpi']) || 300,
       safeMm: Number(settings?.['label.safeMm']) || 3,
       symbology: settings?.['barcode.symbology'] || 'code128',
@@ -90,9 +93,11 @@ export default function PrintPage() {
   const dietType = dietOverride === 'auto' ? labelData?.dietType : dietOverride;
 
   const printData = useMemo(
-    () => (labelData ? { ...labelData, weight, dietType, dietTypeLabelFull } : null),
-    [labelData, weight, dietType, dietTypeLabelFull]
+    () => (labelData ? { ...labelData, weight, dietType, dietTypeLabelFull, layout } : null),
+    [labelData, weight, dietType, dietTypeLabelFull, layout]
   );
+  // классический макет рисуется только на старом носителе 100×70 — тогда переключатель не нужен
+  const compactMedia = !(rp.widthMm >= 95 && rp.heightMm >= 65);
 
   function openGroup(g: string) {
     setSelGroup(g);
@@ -121,6 +126,7 @@ export default function PrintPage() {
         quantity: qty,
         weight: weight || undefined,
         dietType: dietOverride === 'auto' ? undefined : dietOverride,
+        layout,
         ignoreWarnings,
         clientLocal: localKey(new Date()),
         user: localStorage.getItem('kitchenUser') || 'kitchen',
@@ -293,6 +299,20 @@ export default function PrintPage() {
             <div style={{ marginTop: 14 }}>
               <WarningsPanel warnings={dish.warnings} />
             </div>
+
+            {compactMedia && (
+              <>
+                <label className="fld">Макет этикетки</label>
+                <div className="chips" style={{ marginBottom: 4 }}>
+                  <button className={'chip' + (layout === 1 ? ' active' : '')} onClick={() => setLayout(1)}>
+                    Макет 1
+                  </button>
+                  <button className={'chip' + (layout === 2 ? ' active' : '')} onClick={() => setLayout(2)}>
+                    Макет 2
+                  </button>
+                </div>
+              </>
+            )}
 
             <label className="fld">Количество</label>
             <QuantityStepper value={qty} onChange={setQty} />

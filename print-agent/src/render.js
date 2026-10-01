@@ -81,8 +81,8 @@ function rotate(canvas, deg, W, H) {
  */
 export async function renderJob(job) {
   const rp = job.render || {};
-  const widthMm = Number(rp.widthMm) || 100;
-  const heightMm = Number(rp.heightMm) || 70;
+  const widthMm = Number(rp.widthMm) || 80;
+  const heightMm = Number(rp.heightMm) || 50;
   const dpi = Number(rp.dpi) || 300;
   const pxPerMm = dpi / 25.4;
   const W = Math.round(widthMm * pxPerMm);

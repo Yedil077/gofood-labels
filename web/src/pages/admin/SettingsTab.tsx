@@ -47,8 +47,8 @@ export default function SettingsTab() {
   useEffect(() => {
     if (s && canvasRef.current) {
       renderTest(canvasRef.current, {
-        widthMm: Number(s['label.widthMm']) || 100,
-        heightMm: Number(s['label.heightMm']) || 70,
+        widthMm: Number(s['label.widthMm']) || 80,
+        heightMm: Number(s['label.heightMm']) || 50,
         dpi: Number(s['label.dpi']) || 300,
         safeMm: Number(s['label.safeMm']) || 3,
         symbology: s['barcode.symbology'] || 'code128',
@@ -79,8 +79,8 @@ export default function SettingsTab() {
       'printer.dryRun': !!s!['printer.dryRun'],
       'print.copiesMode': s!['print.copiesMode'],
       'print.scale': s!['print.scale'],
-      'label.widthMm': Number(s!['label.widthMm']) || 100,
-      'label.heightMm': Number(s!['label.heightMm']) || 70,
+      'label.widthMm': Number(s!['label.widthMm']) || 80,
+      'label.heightMm': Number(s!['label.heightMm']) || 50,
       'label.dpi': Number(s!['label.dpi']) || 300,
       'label.printRotationDeg': Number(s!['label.printRotationDeg']) || 0,
       'label.safeMm': Number(s!['label.safeMm']) || 3,
@@ -226,8 +226,9 @@ export default function SettingsTab() {
       <div className="card" style={{ marginTop: 18 }}>
         <h2>Размер этикетки</h2>
         <p className="muted">
-          Носитель Epson: 70 мм лента × 100 мм подача. Макет альбомный: 100 × 70 мм. Драйвер ждёт
-          портрет → поставьте поворот 90°.
+          Носитель Epson: этикетка 80 × 50 мм, макет альбомный (ширина 80, высота 50). Макет 1 / Макет 2
+          выбирается на экране печати. При размере ≥ 95 × 65 мм (старый 100 × 70) рисуется прежний
+          классический макет.
         </p>
         <div className="row wrap">
           {[

@@ -28,8 +28,20 @@ const ZT = {
   time: { x: 0.677, y: 0.723, size: 0.052, bold: true },
 };
 
+/**
+ * Какой векторный макет рисовать.
+ *  0 — классический макет под старый носитель 100×70 (включается только на носителе ≥ 95×65 мм);
+ *  1 — «Макет 1»: компактная копия классического под 80×50;
+ *  2 — «Макет 2»: компоновка, оптимизированная под 80×50.
+ * Номер макета приходит в `data.layout` (выбор на экране печати).
+ */
+export function pickLayout(opts) {
+  if (opts.widthMm >= 95 && opts.heightMm >= 65) return 0;
+  return Number(opts.data?.layout) === 2 ? 2 : 1;
+}
+
 export function drawLabel(ctx, opts) {
-  const { widthMm, heightMm, pxPerMm, data } = opts;
+  const { widthMm, heightMm, pxPerMm } = opts;
   const useTemplate = opts.useTemplate !== false && opts.templateImage;
   const W = widthMm * pxPerMm;
   const H = heightMm * pxPerMm;
@@ -38,17 +50,20 @@ export function drawLabel(ctx, opts) {
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, W, H);
   if (useTemplate) drawWithTemplate(ctx, opts, W, H);
-  else drawVector(ctx, opts);
+  else {
+    const layout = pickLayout(opts);
+    if (layout === 2) drawCompact2(ctx, opts);
+    else if (layout === 1) drawCompact1(ctx, opts);
+    else drawVector(ctx, opts);
+  }
   ctx.restore();
 }
 
-/* ============================= векторный макет ============================= */
+/* ===================== общие хелперы векторных макетов ===================== */
 
-function drawVector(ctx, opts) {
-  const { widthMm, heightMm, pxPerMm, data } = opts;
-  const safeMm = opts.safeMm || 3;
-  const barcode = opts.barcode || null;
-  const logo = opts.logoImage || null;
+/** Набор примитивов в миллиметрах (все макеты рисуют в мм, а не в пикселях). */
+function makeKit(ctx, opts) {
+  const { pxPerMm, data } = opts;
   const FF = opts.fontFamily || 'Arial, "Segoe UI", sans-serif';
   const K = data.fontScale || 1;
   const mm = (v) => v * pxPerMm;
@@ -64,9 +79,9 @@ function drawVector(ctx, opts) {
     ctx.font = font(sz, o.bold);
     ctx.fillText(s, mm(x), mm(y));
   };
-  const cap = (s, x, y) => {
+  const cap = (s, x, y, sz = 1.9) => {
     ctx.fillStyle = GREY;
-    ctx.font = font(1.9, true);
+    ctx.font = font(sz, true);
     ctx.fillText(String(s).toUpperCase(), mm(x), mm(y));
   };
   const dotted = (x1, y1, x2, y2, c = LINE) => {
@@ -124,6 +139,89 @@ function drawVector(ctx, opts) {
     }
     return yy;
   };
+  /** Ширина строки в мм. */
+  const width = (s, sz, b) => {
+    ctx.font = font(sz, b);
+    return ctx.measureText(String(s)).width / pxPerMm;
+  };
+  /** Подпись-капс, ужимается под ширину. */
+  const capFit = (s, x, y, sz, maxW) => {
+    const t = String(s).toUpperCase();
+    let z = sz;
+    while (z > 1.05 && width(t, z, true) > maxW) z = Math.round((z - 0.05) * 100) / 100;
+    cap(t, x, y, z);
+  };
+  /**
+   * Абзац в жёсткой рамке [top..bottom] × w: шрифт ужимается от `start` до `min`,
+   * если всё равно не влезает — последняя видимая строка обрывается «…».
+   * Ничего не рисует ниже `bottom`. Возвращает y после последней строки.
+   */
+  const paragraph = (s, x, top, w, bottom, start, min, lh, o = {}) => {
+    const avail = bottom - top;
+    let size = start;
+    let f = fit(s, w, 60, size, min, !!o.bold);
+    while (size > min && f.lines.length * f.size * K * lh > avail) {
+      size = Math.round((size - 0.05) * 100) / 100;
+      f = fit(s, w, 60, size, min, !!o.bold);
+    }
+    const maxLines = Math.max(1, Math.floor((avail + 1e-6) / (f.size * K * lh)));
+    let out = f.lines.slice(0, maxLines);
+    if (f.lines.length > maxLines && out.length) {
+      ctx.font = font(f.size, !!o.bold);
+      let last = out[out.length - 1].replace(/[,;\s]+$/, '');
+      while (last.length > 1 && ctx.measureText(last + '…').width > mm(w)) last = last.slice(0, -1).replace(/[,;\s]+$/, '');
+      out[out.length - 1] = last + '…';
+    }
+    return lines(out, x, top, f.size, { lh, bold: o.bold, color: o.color });
+  };
+  /** Логотип без искажения пропорций, по центру бокса по горизонтали, прижат к верху. */
+  const logoBox = (img, x, y, w, h) => {
+    if (img && img.width) {
+      const r = Math.min(mm(w) / img.width, mm(h) / img.height);
+      const dw = img.width * r;
+      const dh = img.height * r;
+      ctx.drawImage(img, mm(x) + (mm(w) - dw) / 2, mm(y), dw, dh);
+      return dh / pxPerMm;
+    }
+    ctx.fillStyle = INK;
+    ctx.font = `bold ${mm(Math.min(6, h * 0.6))}px ${FF}`;
+    ctx.fillText(data.brand?.name || 'gofood', mm(x), mm(y + 1));
+    return h;
+  };
+  /**
+   * Штрихкод. Ширина — как на прежней этикетке 100×70 (тот же модуль ≈0.27 мм для EAN-13,
+   * чтобы не ухудшить сканирование); уменьшается только высота штрихов.
+   * Сглаживание выключено — края штрихов остаются чёткими. Возвращает {w,h} в мм.
+   */
+  const barcodeWidth = (bc) => (bc && bc.image ? Math.min(32, (9.5 * bc.width) / bc.height) : 0);
+  const drawBarcode = (bc, value, x, y, barH, digitsSz) => {
+    const bw = barcodeWidth(bc);
+    ctx.save();
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(bc.image, mm(x), mm(y), mm(bw), mm(barH));
+    ctx.restore();
+    ctx.fillStyle = INK;
+    ctx.font = font(digitsSz, false);
+    const tw = ctx.measureText(value).width;
+    ctx.fillText(value, mm(x) + Math.max(0, (mm(bw) - tw) / 2), mm(y + barH + 0.4));
+    return { w: bw, h: barH + 0.4 + digitsSz * K };
+  };
+  const ctxFont = (f) => {
+    ctx.font = f;
+  };
+  const widthPx = (s) => ctx.measureText(s).width;
+  return { mm, K, brand, GREY, LINE, INK, font, text, cap, capFit, dotted, wrap, fit, lines, width, paragraph, logoBox, barcodeWidth, drawBarcode, ctxFont, widthPx };
+}
+
+/* ============== классический макет 100×70 (старый носитель) ============== */
+
+function drawVector(ctx, opts) {
+  const { widthMm, heightMm, pxPerMm, data } = opts;
+  const safeMm = opts.safeMm || 3;
+  const barcode = opts.barcode || null;
+  const logo = opts.logoImage || null;
+  const FF = opts.fontFamily || 'Arial, "Segoe UI", sans-serif';
+  const { mm, K, brand, GREY, LINE, INK, font, text, cap, dotted, wrap, fit, lines } = makeKit(ctx, opts);
 
   const dividerX = Math.round(widthMm * 0.31);
   const xL0 = safeMm;
@@ -350,6 +448,374 @@ function drawVector(ctx, opts) {
   }
 }
 
+/* ---------- общие куски компактных макетов (80×50) ---------- */
+
+/** Текст блока «Категория»: тип питания или категория iiko. */
+function dietText(data) {
+  if (data.showDietType) {
+    return data.dietTypeLabelFull || (data.dietType === 'pp' ? 'Правильное питание' : 'Классическое питание');
+  }
+  return data.category || '';
+}
+
+/** Строки условий хранения (как в классическом макете): разбиение по \n, затем перенос по ширине. */
+function storageLines(kit, storageText, w, start, min, maxLines) {
+  const parts = String(storageText || '')
+    .split('\n')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  // перенос по словам, но «+6 °C.» не разрывается (единица не уходит на новую строку одна)
+  const wrapKeep = (p, f) => {
+    const toks = [];
+    for (const t of p.split(/\s+/).filter(Boolean)) {
+      if (/^°/.test(t) && toks.length) toks[toks.length - 1] += ' ' + t;
+      else toks.push(t);
+    }
+    kit.ctxFont(f);
+    const out = [];
+    let cur = '';
+    for (const t of toks) {
+      const c = cur ? cur + ' ' + t : t;
+      if (!cur || kit.widthPx(c) <= kit.mm(w)) cur = c;
+      else {
+        out.push(cur);
+        cur = t;
+      }
+    }
+    if (cur) out.push(cur);
+    return out;
+  };
+  let sz = start;
+  let els = [];
+  for (let g = 0; g < 20; g++) {
+    els = [];
+    for (const p of parts) for (const l of wrapKeep(p, kit.font(sz, false))) els.push(l);
+    if (els.length <= maxLines || sz <= min) break;
+    sz = Math.round((sz - 0.05) * 100) / 100;
+  }
+  return { lines: els.slice(0, maxLines), size: sz };
+}
+
+/* ======================= Макет 1 — компактная копия ======================= */
+/*
+ * Та же структура, что у классического: слева логотип (+ слоган GreenCity) и «Состав»,
+ * справа «Название блюда», ряд «Категория | КБЖУ+Вес», ряд «Дата/время | Штрихкод»,
+ * снизу полоса хранения. Отличие: штрихкод и дата поменялись местами — штрихкод
+ * занимает фиксированную ширину (как раньше) и встаёт под КБЖУ, колонки выровнены.
+ */
+function drawCompact1(ctx, opts) {
+  const { widthMm: W, heightMm: H, data } = opts;
+  const kit = makeKit(ctx, opts);
+  const { mm, K, brand, GREY, LINE, INK, font, text, cap, capFit, dotted, fit, lines, width, paragraph, logoBox } = kit;
+  const s = opts.safeMm || 3;
+  const barcode = opts.barcode || null;
+  const isGC = (data.brand?.logo || '') === 'greencity';
+
+  const dividerX = Math.round(W * 0.31); // 25 мм на 80
+  const xL0 = s;
+  const xLw = dividerX - s - 1.5;
+  const xR0 = dividerX + 3;
+  const xR1 = W - s;
+  const rW = xR1 - xR0;
+  const stripH = 6.5;
+  const botSafe = 2; // нижний край: принтер там не печатает
+  const stripY = H - stripH - botSafe;
+
+  /* --- левая колонка: логотип, слоган (GreenCity), состав --- */
+  const logoH = 10.5;
+  logoBox(opts.logoImage, xL0, s, xLw, logoH);
+  let compTop = s + logoH + 1.8;
+  if (isGC && data.brand?.tagline) {
+    const ty = s + logoH + 0.6;
+    const t = fit(data.brand.tagline, xLw, 1, 1.75, 1.3, true);
+    const tw = width(t.lines[0], t.size, true);
+    text(t.lines[0], xL0 + Math.max(0, (xLw - tw) / 2), ty, t.size, { bold: true });
+    compTop = ty + t.size * K * 1.15 + 1.3;
+  }
+  text('Состав', xL0, compTop, 2.1, { bold: true });
+  dotted(xL0, compTop + 2.9, xL0 + xLw, compTop + 2.9, brand);
+  if (data.composition && data.composition.trim()) {
+    paragraph(data.composition, xL0, compTop + 3.6, xLw, stripY - 1.0, 1.85, 1.5, 1.2);
+  } else {
+    text('—', xL0, compTop + 3.8, 2, { color: GREY });
+  }
+
+  /* --- правая колонка --- */
+  let y = s + 0.4;
+  if (!isGC && data.brand?.tagline) {
+    // gofood: слоган с листком над «Название блюда», как в классическом макете
+    const t = fit(data.brand.tagline, rW - 4, 1, 1.85, 1.3, true);
+    const tw = width(t.lines[0], t.size, true);
+    const startX = xR0 + Math.max(0, (rW - tw - 3) / 2);
+    ctx.save();
+    ctx.fillStyle = brand;
+    ctx.beginPath();
+    ctx.ellipse(mm(startX + 0.8), mm(y + t.size * 0.5), mm(0.95), mm(0.5), -Math.PI / 4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    text(t.lines[0], startX + 2.6, y, t.size, { bold: true });
+    y += Math.max(2.6, t.size * K + 0.9);
+  }
+  dotted(xR0, y, xR1, y, brand);
+  ctx.save();
+  ctx.strokeStyle = LINE;
+  ctx.lineWidth = Math.max(1, mm(0.25));
+  ctx.beginPath();
+  ctx.moveTo(mm(dividerX), mm(y));
+  ctx.lineTo(mm(dividerX), mm(stripY));
+  ctx.stroke();
+  ctx.restore();
+  y += 0.9;
+
+  // правая подколонка (КБЖУ / Штрихкод) — ширины штрихкода, левая (Категория / Дата) — остаток
+  const bw = kit.barcodeWidth(barcode) || 25.8;
+  const rx = xR1 - Math.max(bw, 24);
+  const lW = rx - xR0 - 2;
+
+  const botH = 10.8;
+  const botTop = stripY - 1.3 - botH;
+  const midH = 9.4;
+  const midTop = botTop - 1.5 - midH;
+
+  // название — главный элемент: до 4 строк, шрифт 3.4 → 1.9 мм, по центру своей полосы
+  cap('Название блюда', xR0, y, 1.4);
+  const nameTop = y + 2.0;
+  const nameBottom = midTop - 1.7;
+  let nf = fit(data.name || '—', rW, 4, 3.4, 1.9, true);
+  while (nf.size > 1.9 && nf.lines.length * nf.size * K * 1.12 > nameBottom - nameTop) {
+    nf = fit(data.name || '—', rW, 4, nf.size - 0.1, 1.9, true);
+  }
+  const nameH = nf.lines.length * nf.size * K * 1.12;
+  lines(nf.lines, xR0, nameTop + Math.max(0, (nameBottom - nameTop - nameH) / 2), nf.size, { bold: true, lh: 1.12 });
+  dotted(xR0, midTop - 1.0, xR1, midTop - 1.0, brand);
+
+  // категория
+  cap('Категория', xR0, midTop, 1.4);
+  const dl = dietText(data);
+  if (dl) {
+    const df = fit(dl, lW, data.showDietType ? 2 : 3, 2.1, 1.5, !!data.showDietType);
+    lines(df.lines, xR0, midTop + 2.0, df.size, { bold: !!data.showDietType, lh: 1.1 });
+  } else {
+    text('—', xR0, midTop + 2.1, 2, { color: GREY });
+  }
+
+  // КБЖУ + вес (вес справа, по центру блока, крупнее)
+  drawKbjuColumn(kit, data, rx, midTop, xR1, 1.4, 1.7);
+
+  // дата / время — меньше, чем раньше (не акцент)
+  dotted(xR0, botTop - 0.8, xR1, botTop - 0.8, brand);
+  capFit('Дата / время изготовления', xR0, botTop, 1.4, lW);
+  text(data.dateStr || '—', xR0, botTop + 2.2, 2.2, { bold: true });
+  if (data.timeStr) text(data.timeStr, xR0, botTop + 5.0, 2.7, { bold: true });
+
+  // штрихкод
+  cap('Штрихкод', rx, botTop, 1.4);
+  if (data.barcodeValue && barcode && barcode.image) {
+    kit.drawBarcode(barcode, data.barcodeValue, rx, botTop + 1.9, 6.4, 1.65);
+  } else if (data.barcodeValue) {
+    text(data.barcodeValue, rx, botTop + 3, 2.4, { bold: true });
+  } else {
+    text('—', rx, botTop + 2.6, 2, { color: GREY });
+  }
+
+  /* --- нижняя полоса: хранение --- */
+  dotted(xL0, stripY, xR1, stripY, brand);
+  const cy = stripY + stripH / 2;
+  drawFridge(ctx, mm, brand, xL0 + 2.0, cy, 1.9);
+  const tx = xL0 + 4.8;
+  const st = storageLines(kit, data.storageText, xR1 - tx, 1.75, 1.35, 2);
+  ctx.save();
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = INK;
+  ctx.font = font(st.size, false);
+  const lh = mm(st.size * K * 1.16);
+  const y0 = mm(cy) - ((st.lines.length - 1) * lh) / 2;
+  st.lines.forEach((l, i) => ctx.fillText(l, mm(tx), y0 + i * lh));
+  ctx.restore();
+}
+
+/**
+ * Колонка КБЖУ (Макет 1): Б/Ж/У/Ккал построчно слева, «ВЕС» + значение справа,
+ * по вертикальному центру. Если значения очень длинные — вес ужимается, но не наезжает.
+ */
+function drawKbjuColumn(kit, data, x, top, xRight, capSz, sz) {
+  const { K, GREY, text, cap, lines, width } = kit;
+  cap('КБЖУ', x, top, capSz);
+  const k = data.kbju || {};
+  const has = k.protein != null || k.fat != null || k.carbs != null || k.kcal != null;
+  const firstY = top + 2.0;
+  const rows = [`Белки: ${fmtNum(k.protein)} г`, `Жиры: ${fmtNum(k.fat)} г`, `Углеводы: ${fmtNum(k.carbs)} г`];
+  if (has) lines([...rows, `Ккал: ${k.kcal == null ? '—' : Math.round(k.kcal)}`], x, firstY, sz, { lh: 1.12 });
+  else text('—', x, firstY + 0.2, 2, { color: GREY });
+  if (!data.weight) return;
+  const leftEdge = has ? x + Math.max(...rows.map((r) => width(r, sz, false))) + 1.2 : x;
+  let wSz = 2.7;
+  while (wSz > 1.7 && xRight - width(data.weight, wSz, true) < leftEdge) wSz = Math.round((wSz - 0.05) * 100) / 100;
+  const vw = width(data.weight, wSz, true);
+  const blockH = has ? 4 * sz * K * 1.12 : 4;
+  const cy = firstY + blockH / 2;
+  const capH = capSz * K;
+  const y0 = cy - (capH + 0.4 + wSz * K) / 2;
+  const cw = width('ВЕС', capSz, true);
+  cap('Вес', xRight - Math.max(vw, cw) + (Math.max(vw, cw) - cw), y0, capSz);
+  text(data.weight, xRight - vw, y0 + capH + 0.4, wSz, { bold: true });
+}
+
+/* =================== Макет 2 — оптимизирован под 80×50 =================== */
+/*
+ * Шапка: логотип (+ слоган) слева, крупное название справа, под ним — категория.
+ * Середина: «Состав» слева, панель КБЖУ + Вес справа (таблица «подпись — значение»).
+ * Низ: штрихкод слева; справа — дата/время одной строкой и условия хранения.
+ */
+function drawCompact2(ctx, opts) {
+  const { widthMm: W, heightMm: H, data } = opts;
+  const kit = makeKit(ctx, opts);
+  const { mm, K, brand, GREY, INK, font, text, cap, dotted, fit, lines, width, paragraph, logoBox } = kit;
+  const s = opts.safeMm || 3;
+  const barcode = opts.barcode || null;
+  const x0 = s;
+  const x1 = W - s;
+  const yMax = H - 2; // нижний край: принтер там не печатает
+
+  /* --- шапка --- */
+  const logoW = 14;
+  const logoH = 9.4;
+  const lh = logoBox(opts.logoImage, x0, s, logoW, logoH);
+  let hdrB = s + 13.2;
+  if (data.brand?.tagline) {
+    const t = fit(data.brand.tagline, logoW + 1, 2, 1.35, 1.0, true);
+    let ty = s + Math.min(lh, logoH) + 0.5;
+    for (const l of t.lines) {
+      const tw = width(l, t.size, true);
+      text(l, x0 + (logoW - tw) / 2, ty, t.size, { bold: true });
+      ty += t.size * K * 1.12;
+    }
+    hdrB = Math.max(hdrB, ty + 0.2);
+  }
+  const nx = x0 + logoW + 2.2;
+  const nW = x1 - nx;
+  const cat = dietText(data);
+  const catSz = 1.65;
+  const catH = cat ? catSz * K + 0.9 : 0;
+  const nameAvail = hdrB - s - catH;
+  let nf = fit(data.name || '—', nW, 3, 3.8, 2.1, true);
+  while (nf.size > 2.1 && nf.lines.length * nf.size * K * 1.1 > nameAvail) {
+    nf = fit(data.name || '—', nW, 3, nf.size - 0.1, 2.1, true);
+  }
+  const nameH = nf.lines.length * nf.size * K * 1.1;
+  const blockTop = s + Math.max(0, (hdrB - s - nameH - catH) / 2);
+  const afterName = lines(nf.lines, nx, blockTop, nf.size, { bold: true, lh: 1.1 });
+  if (cat) {
+    const cf = fit(cat, nW - 2.2, 1, catSz, 1.25, false);
+    const cy = afterName + 0.6;
+    ctx.save();
+    ctx.fillStyle = brand;
+    ctx.beginPath();
+    ctx.arc(mm(nx + 0.7), mm(cy + cf.size * K * 0.55), mm(0.65), 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    text(cf.lines[0], nx + 2.0, cy, cf.size, { color: '#444444', bold: !!data.showDietType });
+  }
+  const div1 = hdrB + 0.6;
+  dotted(x0, div1, x1, div1, brand);
+
+  /* --- середина: состав | КБЖУ --- */
+  const mT = div1 + 0.8;
+  const mB = 33.6 - (50 - H); // на 80×50 — 33.6 мм
+  const pw = 24.5;
+  const px = x1 - pw;
+
+  cap('Состав', x0, mT, 1.35);
+  if (data.composition && data.composition.trim()) {
+    paragraph(data.composition, x0, mT + 2.1, px - x0 - 2.2, mB, 1.8, 1.4, 1.18);
+  } else {
+    text('—', x0, mT + 2.2, 2, { color: GREY });
+  }
+
+  // панель КБЖУ: лёгкая подложка фирменного цвета
+  ctx.save();
+  ctx.globalAlpha = 0.12;
+  ctx.fillStyle = brand;
+  roundRect(ctx, mm(px), mm(mT - 0.3), mm(pw), mm(mB - mT + 0.3), mm(1.2));
+  ctx.fill();
+  ctx.restore();
+  const ix0 = px + 1.3;
+  const ix1 = x1 - 1.3;
+  cap('КБЖУ', ix0, mT + 0.7, 1.35);
+  const k = data.kbju || {};
+  const g = (v) => (v == null || v === '' ? '—' : `${fmtNum(v)} г`);
+  const rows = [
+    ['Белки', g(k.protein)],
+    ['Жиры', g(k.fat)],
+    ['Углеводы', g(k.carbs)],
+    ['Ккал', k.kcal == null ? '—' : String(Math.round(k.kcal))],
+  ];
+  const rSz = 1.65;
+  const rStep = 2.1;
+  let ry = mT + 2.9;
+  for (const [lbl, val] of rows) {
+    let vs = rSz;
+    while (vs > 1.2 && width(lbl, rSz, false) + 1 + width(val, vs, true) > ix1 - ix0) vs -= 0.05;
+    text(lbl, ix0, ry, rSz, {});
+    text(val, ix1 - width(val, vs, true), ry, vs, { bold: true });
+    ry += rStep;
+  }
+  // вес — отдельной строкой, крупнее
+  const wy = ry + 0.35;
+  dotted(ix0, wy, ix1, wy, brand);
+  const wVal = data.weight || '—';
+  let wSz = 2.6;
+  while (wSz > 1.5 && width('Вес', 1.75, false) + 1 + width(wVal, wSz, true) > ix1 - ix0) wSz -= 0.05;
+  const wRowY = wy + 0.6;
+  const wRowH = Math.max(1.75, wSz) * K;
+  text('Вес', ix0, wRowY + (wRowH - 1.75 * K) / 2 + 0.15, 1.75, {});
+  text(wVal, ix1 - width(wVal, wSz, true), wRowY + (wRowH - wSz * K) / 2, wSz, { bold: true, color: data.weight ? INK : GREY });
+
+  const div2 = mB + 0.7;
+  dotted(x0, div2, x1, div2, brand);
+
+  /* --- низ: штрихкод | дата + хранение --- */
+  const bT = div2 + 0.8;
+  const bx = x0 + 0.6; // поле этикетки слева — «тихая зона» штрихкода
+  let rightX = bx + 28.4;
+  if (data.barcodeValue && barcode && barcode.image) {
+    const bh = Math.max(5, Math.min(8.2, yMax - bT - 0.4 - 1.6 * K - 0.2));
+    const r = kit.drawBarcode(barcode, data.barcodeValue, bx, bT + 0.2, bh, 1.6);
+    rightX = bx + r.w + 2.6;
+  } else if (data.barcodeValue) {
+    text(data.barcodeValue, bx, bT + 1, 2.2, { bold: true });
+  } else {
+    rightX = x0;
+  }
+  cap('Изготовлено', rightX, bT, 1.3);
+  const dStr = data.dateStr || '—';
+  text(dStr, rightX, bT + 1.85, 2.1, { bold: true });
+  if (data.timeStr) {
+    text(data.timeStr, rightX + width(dStr, 2.1, true) + 1.6, bT + 1.85, 2.1, { bold: true });
+  }
+  const sTop = bT + 4.9;
+  const fr = 1.45;
+  drawFridge(ctx, mm, brand, rightX + fr, sTop + fr + 0.1, fr);
+  const stx = rightX + 2 * fr + 1.0;
+  const maxL = Math.max(1, Math.floor((yMax - sTop) / (1.3 * K * 1.15)));
+  const st = storageLines(kit, data.storageText, x1 - stx, 1.6, 1.3, Math.min(3, maxL));
+  lines(st.lines, stx, sTop, st.size, { lh: 1.15 });
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
 function drawFridge(ctx, mm, color, cxMm, cyMm, rMm) {
   const cx = mm(cxMm);
   const cy = mm(cyMm);
@@ -504,6 +970,34 @@ export function drawTestLabel(ctx, opts) {
   ctx.moveTo(mm(widthMm), 0);
   ctx.lineTo(0, mm(heightMm));
   ctx.stroke();
+  if (heightMm < 60) {
+    // компактный носитель (80×50): всё мельче и плотнее, чтобы не уходило за край
+    ctx.fillStyle = brand;
+    ctx.beginPath();
+    ctx.moveTo(mm(10), mm(13));
+    ctx.lineTo(mm(13), mm(13));
+    ctx.lineTo(mm(11.5), mm(10));
+    ctx.closePath();
+    ctx.fill();
+    ctx.font = `bold ${mm(3)}px ${fontFamily}`;
+    ctx.fillText('подача / feed', mm(14.5), mm(10));
+    ctx.fillStyle = '#000';
+    ctx.font = `bold ${mm(2.8)}px ${fontFamily}`;
+    ctx.fillText(`${widthMm} × ${heightMm} мм  •  ${dpi || ''} dpi`, mm(10), mm(15));
+    ctx.font = `${mm(2.1)}px ${fontFamily}`;
+    ctx.fillText('Epson ColorWorks CW-C4030 — тест', mm(10), mm(19.3));
+    ctx.fillText(new Date().toLocaleString('ru-RU'), mm(10), mm(22.3));
+    if (barcode && barcode.image) {
+      ctx.save();
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(barcode.image, mm(10), mm(26.5), mm(30), mm(11.5));
+      ctx.restore();
+      ctx.font = `${mm(2.1)}px ${fontFamily}`;
+      ctx.fillText('1234567890128', mm(10), mm(38.6));
+    }
+    ctx.restore();
+    return;
+  }
   ctx.fillStyle = brand;
   ctx.beginPath();
   ctx.moveTo(mm(12), mm(heightMm / 2 - 8));
