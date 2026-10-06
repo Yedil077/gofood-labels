@@ -6,9 +6,11 @@ import WeightStepper from '../components/WeightStepper';
 import LabelPreview from '../components/LabelPreview';
 import WarningsPanel from '../components/WarningsPanel';
 import { api } from '../api';
-import { getLabelSizeId, setLabelSizeId } from '../config';
+import { getLabelSizeId, setLabelSizeId, getPrintVariantId, setPrintVariantId } from '../config';
 // @ts-ignore
 import { LABEL_SIZES, labelSizeById, labelSizeFor } from '../shared/labelSizes.js';
+// @ts-ignore
+import { PRINT_VARIANTS, printVariantById } from '../shared/printVariants.js';
 // @ts-ignore
 import { calculateLabelDateTime, localKey } from '../shared/labelDateTime.js';
 // @ts-ignore
@@ -32,6 +34,9 @@ export default function PrintPage() {
   const [dietOverride, setDietOverride] = useState<'auto' | 'pp' | 'classic'>('auto');
   // размер этикетки: выбор на этом экране (запоминается в браузере); по умолчанию — из настроек
   const [sizeId, setSizeId] = useState<string>(getLabelSizeId);
+  // вариант печати (Обычный / Айдар — 72 ч у всех блюд), запоминается в браузере
+  const [variantId, setVariantId] = useState<string>(getPrintVariantId);
+  const variant = printVariantById(variantId);
   const [now, setNow] = useState(new Date());
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<null | { kind: 'ok' | 'err' | 'wait'; text: string; note?: string }>(null);
@@ -84,8 +89,8 @@ export default function PrintPage() {
 
   const labelData = useMemo(() => {
     if (!settings || !dt || !dish) return null;
-    return normalizeDishForLabel(dish, settings, dt);
-  }, [dish, settings, dt]);
+    return normalizeDishForLabel(dish, settings, dt, { shelfHours: variant.shelfHours });
+  }, [dish, settings, dt, variant.shelfHours]);
 
   // вес по умолчанию — из таблицы категорий; тип питания — авто-детект.
   // Менеджер может поправить оба перед печатью, для конкретного тиража.
@@ -135,6 +140,7 @@ export default function PrintPage() {
         weight: weight || undefined,
         dietType: dietOverride === 'auto' ? undefined : dietOverride,
         labelSize: size.id,
+        variant: variant.id,
         ignoreWarnings,
         clientLocal: localKey(new Date()),
         user: localStorage.getItem('kitchenUser') || 'kitchen',
@@ -317,6 +323,23 @@ export default function PrintPage() {
                   onClick={() => chooseSize(s.id)}
                 >
                   {s.title}
+                </button>
+              ))}
+            </div>
+
+            <label className="fld">Вариант</label>
+            <div className="chips" style={{ marginBottom: 4 }}>
+              {PRINT_VARIANTS.map((v: any) => (
+                <button
+                  key={v.id}
+                  className={'chip' + (variant.id === v.id ? ' active' : '')}
+                  onClick={() => {
+                    setVariantId(v.id);
+                    setPrintVariantId(v.id);
+                  }}
+                >
+                  {v.title}
+                  {v.shelfHours ? <span className="muted"> · {v.shelfHours} ч</span> : null}
                 </button>
               ))}
             </div>

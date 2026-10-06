@@ -46,15 +46,17 @@ export function warningObjects(dish, settings) {
  * @param {object} dish     запись блюда
  * @param {object} settings  слитые настройки
  * @param {{date:string,time:string,approximate?:boolean}} dt
+ * @param {{shelfHours?:number}} [opts]  вариант печати (например, «Айдар» — 72 ч у всех блюд)
  */
-export function normalizeDishForLabel(dish, settings, dt) {
+export function normalizeDishForLabel(dish, settings, dt, opts = {}) {
   const bc = pickBarcodeValue(dish, settings);
 
   // Режим 'ticket' (по умолчанию): вес/время/срок хранения по категории (как в iiko-ценнике),
   // дата = следующий день. Режим 'formula' — старый расчёт из dt.
   const ticketMode = (settings['label.timeMode'] || 'ticket') !== 'formula';
   const rule = resolveTicketRule(dish.category, groupOf(dish.category).group);
-  const shelfHours = rule ? rule.shelfHours
+  const shelfHours = Number(opts.shelfHours) > 0 ? Number(opts.shelfHours)
+    : rule ? rule.shelfHours
     : Number(settings['label.shelfHoursDefault']) || DEFAULT_SHELF_HOURS;
 
   let dateStr = dt?.date || '';

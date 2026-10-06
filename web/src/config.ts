@@ -34,6 +34,21 @@ export function setLabelSizeId(v: string) {
     /* no-op */
   }
 }
+/** Выбранный вариант печати ('standard' | 'aidar'), хранится в браузере. */
+export function getPrintVariantId(): string {
+  try {
+    return localStorage.getItem('printVariant') || 'standard';
+  } catch {
+    return 'standard';
+  }
+}
+export function setPrintVariantId(v: string) {
+  try {
+    localStorage.setItem('printVariant', v);
+  } catch {
+    /* no-op */
+  }
+}
 export function setApiBase(b: string) {
   try {
     if (b) localStorage.setItem('apiBase', b.replace(/\/$/, ''));

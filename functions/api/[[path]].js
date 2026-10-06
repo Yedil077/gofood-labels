@@ -25,6 +25,7 @@ import {
 } from '../../web/src/shared/normalize.js';
 import { detectDietType } from '../../web/src/shared/dietType.js';
 import { labelSizeById } from '../../web/src/shared/labelSizes.js';
+import { printVariantById } from '../../web/src/shared/printVariants.js';
 import { Iiko } from '../../web/src/shared/iiko.js';
 import { buildNomenclatureItems, polishComposition } from '../../web/src/shared/iikoSync.js';
 
@@ -533,7 +534,8 @@ async function route(req) {
       }
       const local = body.clientLocal || utcShiftedKey(settings.datetime.tzOffsetMin);
       const dt = calculateLabelDateTime(local, settings.datetime);
-      const label = normalizeDishForLabel(dish, settings, dt);
+      const variant = printVariantById(body.variant); // «Айдар» — 72 ч у всех блюд
+      const label = normalizeDishForLabel(dish, settings, dt, { shelfHours: variant.shelfHours });
       if (body.weight != null && String(body.weight).trim()) label.weight = String(body.weight).trim();
       if (body.dietType === 'pp' || body.dietType === 'classic') {
         label.dietType = body.dietType;
