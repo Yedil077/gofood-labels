@@ -27,7 +27,8 @@ export default function LabelPreview({ data, rp }: Props) {
   return (
     <div className="preview-box">
       <div className="preview-cap">
-        PREVIEW ЭТИКЕТКИ · {rp.widthMm} × {rp.heightMm} мм
+        PREVIEW ЭТИКЕТКИ ·{' '}
+        {rp.widthMm === rp.heightMm ? `круг Ø${rp.widthMm} мм` : `${rp.widthMm} × ${rp.heightMm} мм`}
       </div>
       <div className="preview-frame" style={{ width: cssW, height: cssH }}>
         <canvas ref={canvasRef} style={{ width: '100%', height: '100%', display: 'block' }} />

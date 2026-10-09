@@ -108,7 +108,8 @@ export async function renderJob(job) {
     const useTemplate = rp.useTemplate === true;
     const [templateImage, logoImage] = await Promise.all([
       useTemplate ? getTemplate() : Promise.resolve(null),
-      getLogo(data?.brand?.logo || 'gofood'),
+      // круглая наклейка (квадратный носитель) — горизонтальный логотип, если он есть у бренда
+      getLogo((widthMm === heightMm && data?.brand?.logoWide) || data?.brand?.logo || 'gofood'),
     ]);
     drawLabel(ctx, {
       widthMm,

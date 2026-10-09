@@ -9,6 +9,9 @@ export const BRAND_PRESETS = {
     logo: 'gofood',
     tagline: 'Больше энергии — больше возможностей',
     color: '#F2661F',
+    // круглая наклейка: горизонтальный логотип и слоган из присланного макета Ø50
+    logoWide: 'gofood-h',
+    roundTagline: 'Быстро и вкусно',
   },
   greencity: {
     name: 'GreenCity',

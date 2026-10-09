@@ -31,9 +31,11 @@ const ZT = {
 /**
  * Какой векторный макет рисовать — определяется размером носителя (выбор на экране печати):
  *  0 — классический макет 100×70 (носитель ≥ 95×65 мм);
- *  1 — «Макет 1»: компактная копия классического для 80×50.
+ *  1 — «Макет 1»: компактная копия классического для 80×50;
+ *  2 — круглая наклейка (квадратный носитель: Ø50, Ø60).
  */
 export function pickLayout(opts) {
+  if (opts.widthMm === opts.heightMm) return 2;
   return opts.widthMm >= 95 && opts.heightMm >= 65 ? 0 : 1;
 }
 
@@ -46,8 +48,10 @@ export function drawLabel(ctx, opts) {
   ctx.save();
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, W, H);
-  if (useTemplate) drawWithTemplate(ctx, opts, W, H);
-  else if (pickLayout(opts) === 1) drawCompact1(ctx, opts);
+  const layout = pickLayout(opts);
+  if (layout === 2) drawRound(ctx, opts); // круглая — всегда векторная, без картинки-макета
+  else if (useTemplate) drawWithTemplate(ctx, opts, W, H);
+  else if (layout === 1) drawCompact1(ctx, opts);
   else drawVector(ctx, opts);
   ctx.restore();
 }
@@ -664,6 +668,210 @@ function drawKbjuColumn(kit, data, x, top, xRight, capSz, sz) {
   const cw = width('ВЕС', capSz, true);
   cap('Вес', xRight - Math.max(vw, cw) + (Math.max(vw, cw) - cw), y0, capSz);
   text(data.weight, xRight - vw, y0 + capH + 0.4, wSz, { bold: true });
+}
+
+/* ===================== круглая наклейка Ø50 / Ø60 мм ===================== */
+/*
+ * Перенос присланного макета «GoFood_etiketka_50mm» (SVG viewBox 0 0 50 50) на canvas.
+ * Все координаты — в системе шаблона 50×50; для Ø60 масштаб ×1.2 (крупнее шрифты).
+ * Двойное кольцо в цвет бренда, всё содержимое — внутри безопасного круга r=21.4.
+ * Сверху логотип + слоган, по центру крупное название, ниже три колонки:
+ * «Состав» | «КБЖУ на <вес>» | «Дата» (дата, время, срок хранения).
+ */
+function drawRound(ctx, opts) {
+  const { widthMm, data } = opts;
+  const s = widthMm / 50;
+  const u = (v) => v * s * opts.pxPerMm; // единица шаблона → пиксели
+  const FF = opts.fontFamily || 'Arial, "Segoe UI", sans-serif';
+  const brand = data.brand?.color || '#E46A23';
+  const INK = '#222222';
+  const fontOf = (sz, w = 400) => `${w} ${u(sz)}px ${FF}`;
+  const wOf = (t, sz, w) => {
+    ctx.font = fontOf(sz, w);
+    return ctx.measureText(t).width / u(1);
+  };
+
+  // перенос по словам (+ разрез слишком длинного слова), абзацы по \n;
+  // неразрывный пробел (NB) не переносится — «50 г», «Ж 18 г» не отрываются
+  const linesFor = (str, sz, maxW, w) => {
+    const out = [];
+    for (const para of String(str).split('\n')) {
+      let line = '';
+      for (let word of para.trim().split(/[ \t]+/).filter(Boolean)) {
+        if (wOf(word, sz, w) > maxW) {
+          if (line) out.push(line), (line = '');
+          while (word && wOf(word, sz, w) > maxW) {
+            let cut = 1;
+            while (cut < word.length && wOf(word.slice(0, cut + 1), sz, w) <= maxW) cut++;
+            out.push(word.slice(0, cut));
+            word = word.slice(cut);
+          }
+          if (!word) continue;
+        }
+        const t = line ? line + ' ' + word : word;
+        if (wOf(t, sz, w) <= maxW) line = t;
+        else {
+          if (line) out.push(line);
+          line = word;
+        }
+      }
+      if (line) out.push(line);
+    }
+    return out;
+  };
+  // подбор размера в рамку; не влезло на минимуме — обрезка «…»
+  const fitBox = (str, maxW, maxH, from, to, lead, w) => {
+    let size = from;
+    let L = linesFor(str, size, maxW, w);
+    while (size > to && L.length * size * lead > maxH) {
+      size = Math.max(to, Math.round((size - 0.06) * 100) / 100);
+      L = linesFor(str, size, maxW, w);
+    }
+    const maxLines = Math.max(1, Math.floor((maxH + 1e-6) / (size * lead)));
+    if (L.length > maxLines) {
+      L = L.slice(0, maxLines);
+      let last = L[maxLines - 1].replace(/[,;\s]+$/, '');
+      while (last.length > 1 && wOf(last + '…', size, w) > maxW) last = last.slice(0, -1).replace(/[,;\s]+$/, '');
+      L[maxLines - 1] = last + '…';
+    }
+    return { size, lines: L };
+  };
+  const put = (str, box, o) => {
+    const r = fitBox(str, box.w, box.h, o.max, o.min, o.lead || 1.16, o.w || 400);
+    const lh = r.size * (o.lead || 1.16);
+    ctx.fillStyle = o.color || INK;
+    ctx.font = fontOf(r.size, o.w || 400);
+    ctx.textAlign = o.center ? 'center' : 'left';
+    r.lines.forEach((l, i) => ctx.fillText(l, u(o.center ? box.x + box.w / 2 : box.x), u(box.y + (i + 1) * lh - 0.22)));
+    ctx.textAlign = 'left';
+    return r;
+  };
+  const circle = (r) => {
+    ctx.beginPath();
+    ctx.arc(u(25), u(25), u(r), 0, Math.PI * 2);
+  };
+
+  ctx.save();
+  ctx.textBaseline = 'alphabetic';
+
+  // кольца
+  circle(23.5);
+  ctx.fillStyle = '#ffffff';
+  ctx.fill();
+  ctx.strokeStyle = brand;
+  ctx.lineWidth = u(0.36);
+  ctx.stroke();
+  circle(22.5);
+  ctx.save();
+  ctx.globalAlpha = 0.55;
+  ctx.lineWidth = u(0.17);
+  ctx.stroke();
+  ctx.restore();
+
+  // всё содержимое — внутри безопасного круга
+  circle(21.4);
+  ctx.clip();
+
+  // логотип: горизонтальный — полосой 25.5×5.35 (как в макете); вертикальный — выше, по центру
+  const logo = opts.logoImage;
+  let tagY = 14.8;
+  let titleTop = 16.3;
+  if (logo && logo.width) {
+    const wide = logo.width / logo.height > 2;
+    const bw = wide ? 25.5 : 16;
+    const bh = wide ? 5.35 : 8.0;
+    const by = wide ? 7.0 : 5.4;
+    const r = Math.min(bw / logo.width, bh / logo.height);
+    const dw = logo.width * r;
+    const dh = logo.height * r;
+    ctx.drawImage(logo, u(25 - dw / 2), u(by + (bh - dh) / 2), u(dw), u(dh));
+    if (!wide) {
+      tagY = by + bh + 1.75;
+      titleTop = tagY + 1.3;
+    }
+  }
+  // слоган: капсом, разрядка 0.58 (посимвольно — letterSpacing есть не во всех canvas)
+  const tag = String(data.brand?.roundTagline || data.brand?.tagline || '').toUpperCase();
+  if (tag) {
+    let tsz = 1.55;
+    let sp = 0.58;
+    const tw = (z, p) => [...tag].reduce((a, ch) => a + wOf(ch, z, 400) + p, -p);
+    while (tsz > 1.1 && tw(tsz, sp) > 30) {
+      tsz -= 0.05;
+      sp = Math.max(0.2, sp - 0.03);
+    }
+    let x = 25 - tw(tsz, sp) / 2;
+    ctx.fillStyle = '#252525';
+    ctx.font = fontOf(tsz, 400);
+    for (const ch of tag) {
+      ctx.fillText(ch, u(x), u(tagY));
+      x += wOf(ch, tsz, 400) + sp;
+    }
+  }
+
+  // название — крупно, по центру; цвет бренда (светлый бренд-цвет → чёрный, ради контраста)
+  const titleColor = luminance(brand) > 0.45 ? '#111111' : brand;
+  const tb = { x: 7, y: titleTop, w: 36, h: 26.0 - titleTop };
+  const tr = fitBox(data.name || 'НАЗВАНИЕ', tb.w, tb.h, 5.0, 2.3, 1.04, 800);
+  const tlh = tr.size * 1.04;
+  const off = (tb.h - tr.lines.length * tlh) / 2;
+  ctx.fillStyle = titleColor;
+  ctx.font = fontOf(tr.size, 800);
+  ctx.textAlign = 'center';
+  tr.lines.forEach((l, i) => ctx.fillText(l, u(25), u(tb.y + off + (i + 1) * tlh - 0.2)));
+  ctx.textAlign = 'left';
+
+  // разделитель
+  ctx.strokeStyle = brand;
+  ctx.lineWidth = u(0.34);
+  ctx.beginPath();
+  ctx.moveTo(u(7.6), u(27.4));
+  ctx.lineTo(u(42.4), u(27.4));
+  ctx.stroke();
+
+  // три колонки (вписаны в хорду круга на y≈40)
+  const k = data.kbju || {};
+  const hasK = k.protein != null || k.fat != null || k.carbs != null || k.kcal != null;
+  const NB = ' ';
+  const n = (v) => (v == null || v === '' ? '—' : fmtNum(v));
+  const kbjuBody = hasK
+    ? `${k.kcal == null ? '—' : Math.round(k.kcal)}${NB}ккал\n` +
+      `Б${NB}${n(k.protein)}${NB}г · Ж${NB}${n(k.fat)}${NB}г\nУ${NB}${n(k.carbs)}${NB}г`
+    : '—';
+  const dateBody = [data.dateStr || '—', data.timeStr || '', data.shelfHours ? `Срок${NB}${data.shelfHours}${NB}ч` : '']
+    .filter(Boolean)
+    .join('\n');
+  const weightNb = String(data.weight || '').trim().replace(/\s+/g, NB);
+  const specs = [
+    { x: 10.5, w: 9.1, head: 'Состав:', body: (data.composition || '').trim() || '—' },
+    { x: 20.6, w: 9.0, head: weightNb ? `КБЖУ на ${weightNb}:` : 'КБЖУ:', body: kbjuBody },
+    { x: 30.6, w: 8.9, head: 'Дата:', body: dateBody },
+  ];
+  specs.forEach((b, i) => {
+    if (i > 0) {
+      ctx.strokeStyle = '#dbdad9';
+      ctx.lineWidth = u(0.16);
+      ctx.beginPath();
+      ctx.moveTo(u(b.x - 0.55), u(29.3));
+      ctx.lineTo(u(b.x - 0.55), u(39.9));
+      ctx.stroke();
+    }
+    put(b.head, { x: b.x, y: 29.1, w: b.w, h: 3.5 }, { max: 1.53, min: 1.25, w: 700, color: '#121212' });
+    put(b.body, { x: b.x, y: 32.3, w: b.w, h: 7.1 }, { max: 1.46, min: 1.1, lead: 1.15, color: '#181818' });
+  });
+
+  ctx.restore();
+}
+
+/** Относительная яркость цвета #rrggbb (0..1). */
+function luminance(hex) {
+  const m = String(hex).replace('#', '');
+  if (m.length < 6) return 0;
+  const c = [0, 2, 4].map((i) => {
+    const v = parseInt(m.slice(i, i + 2), 16) / 255;
+    return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
 }
 
 function drawFridge(ctx, mm, color, cxMm, cyMm, rMm) {

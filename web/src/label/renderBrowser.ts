@@ -62,9 +62,11 @@ export async function renderLabelAsync(canvas: HTMLCanvasElement, data: any, rp:
   canvas.height = Math.round(rp.heightMm * pxPerMm);
   const ctx = canvas.getContext('2d')!;
   const barcode = makeBarcode(data.barcodeValue, data.symbology || rp.symbology);
+  // круглая наклейка (квадратный носитель) — горизонтальный логотип, если он есть у бренда
+  const round = rp.widthMm === rp.heightMm;
   const [templateImage, logoImage] = await Promise.all([
     rp.useTemplate ? loadTemplate() : Promise.resolve(null),
-    loadLogo(data?.brand?.logo || 'gofood'),
+    loadLogo((round && data?.brand?.logoWide) || data?.brand?.logo || 'gofood'),
   ]);
   drawLabel(ctx, {
     widthMm: rp.widthMm,
