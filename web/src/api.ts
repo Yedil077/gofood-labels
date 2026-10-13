@@ -80,6 +80,15 @@ export const api = {
   syncStatus: () =>
     req<{ enabled: boolean; everyHours: number; lastRunAt: string | null; lastResult: any }>('/sync/status'),
   syncRun: () => req<{ ok: boolean; jobId: number }>('/sync/run', { method: 'POST', body: '{}' }),
+  /** Новые блюда из iiko: без `add` — список; с `add` (артикулы) — добавить. */
+  newDishes: (add?: string[]) =>
+    req<{
+      ok: boolean;
+      error?: string;
+      candidates?: { name: string; num: string; code: string; category: string; composition: string }[];
+      added?: number;
+      names?: string[];
+    }>('/sync/new-dishes', { method: 'POST', body: JSON.stringify(add ? { add } : {}) }),
 
   history: (limit = 200) => req<{ jobs: PrintJob[] }>(`/history?limit=${limit}`),
   logs: () => req<{ logs: LogRow[] }>('/logs'),

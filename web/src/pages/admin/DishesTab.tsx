@@ -21,6 +21,7 @@ export default function DishesTab() {
   const [cats, setCats] = useState<string[]>([]);
   const [edit, setEdit] = useState<Dish | null>(null);
   const [saveErr, setSaveErr] = useState('');
+  const [showNew, setShowNew] = useState(false);
   const [params, setParams] = useSearchParams();
 
   function load() {
@@ -93,6 +94,9 @@ export default function DishesTab() {
             <input type="checkbox" checked={showAll} onChange={(e) => setShowAll(e.target.checked)} />
             показывать выключенные
           </label>
+          <button className="btn primary" onClick={() => setShowNew(true)}>
+            ⟳ Новые блюда из iiko
+          </button>
         </div>
       </div>
 
@@ -103,7 +107,7 @@ export default function DishesTab() {
           </tr>
         </thead>
         <tbody>
-          {filtered.slice(0, 600).map((d) => (
+          {filtered.slice(0, 2000).map((d) => (
             <tr key={d.id}>
               <td>{!d.active && <span className="tag muted">выкл</span>} {d.name}</td>
               <td>
@@ -131,6 +135,125 @@ export default function DishesTab() {
       {edit && settings && (
         <EditModal dish={edit} settings={settings} cats={cats} saveErr={saveErr} onSave={save} onClose={close} />
       )}
+      {showNew && (
+        <NewDishesModal
+          onClose={() => setShowNew(false)}
+          onAdded={() => load()}
+        />
+      )}
+    </div>
+  );
+}
+
+type NewDish = { name: string; num: string; code: string; category: string; composition: string };
+
+/** Окно «Новые блюда из iiko»: найти → отметить → добавить. */
+function NewDishesModal({ onClose, onAdded }: { onClose: () => void; onAdded: () => void }) {
+  const [state, setState] = useState<'loading' | 'list' | 'adding' | 'done' | 'error'>('loading');
+  const [list, setList] = useState<NewDish[]>([]);
+  const [sel, setSel] = useState<Set<string>>(new Set());
+  const [msg, setMsg] = useState('');
+  const keyOf = (d: NewDish) => d.num || d.code || d.name;
+
+  useEffect(() => {
+    api.newDishes().then((r: any) => {
+      if (r?._status === 401) {
+        setMsg('Нужен пароль администратора: Настройки → «Пароль администратора».');
+        return setState('error');
+      }
+      if (!r?.ok) {
+        setMsg(r?.error || 'Не удалось получить данные из iiko.');
+        return setState('error');
+      }
+      const c = r.candidates || [];
+      setList(c);
+      setSel(new Set(c.map(keyOf)));
+      setState('list');
+    });
+  }, []);
+
+  function toggle(k: string) {
+    const n = new Set(sel);
+    if (n.has(k)) n.delete(k);
+    else n.add(k);
+    setSel(n);
+  }
+  async function add() {
+    setState('adding');
+    const r: any = await api.newDishes([...sel]);
+    if (!r?.ok) {
+      setMsg(r?.error || 'Не удалось добавить.');
+      return setState('error');
+    }
+    setMsg(`Добавлено блюд: ${r.added}.`);
+    setState('done');
+    onAdded();
+  }
+
+  return (
+    <div className="modal-bg" onClick={state === 'adding' ? undefined : onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 860 }}>
+        <h2>Новые блюда из iiko</h2>
+        {state === 'loading' && (
+          <p className="muted">
+            <span className="spinner" /> Проверяю iiko… (до минуты)
+          </p>
+        )}
+        {state === 'error' && <div className="banner err">{msg}</div>}
+        {state === 'done' && <div className="banner ok">{msg}</div>}
+        {(state === 'list' || state === 'adding') &&
+          (list.length === 0 ? (
+            <div className="banner ok">Новых блюд нет — всё, что есть в iiko, уже на сайте.</div>
+          ) : (
+            <>
+              <p className="muted">
+                Найдено {list.length}. Категория — по группе iiko. Состав — из техкарты; если техкарты
+                нет, состав пустой (заполните в карточке блюда). КБЖУ из iiko не приходит.
+              </p>
+              <div style={{ maxHeight: 420, overflow: 'auto' }}>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>
+                        <input
+                          type="checkbox"
+                          checked={sel.size === list.length}
+                          onChange={(e) => setSel(new Set(e.target.checked ? list.map(keyOf) : []))}
+                        />
+                      </th>
+                      <th>Название</th><th>Категория</th><th>Артикул</th><th>Состав</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {list.map((d) => (
+                      <tr key={keyOf(d)}>
+                        <td>
+                          <input type="checkbox" checked={sel.has(keyOf(d))} onChange={() => toggle(keyOf(d))} />
+                        </td>
+                        <td>{d.name}</td>
+                        <td>{d.category}</td>
+                        <td className="mono">{d.num || '—'}</td>
+                        <td style={{ fontSize: 12 }}>
+                          {d.composition || <span className="tag warn">нет техкарты</span>}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          ))}
+        <div className="row wrap" style={{ justifyContent: 'flex-end', marginTop: 14 }}>
+          <button className="btn" onClick={onClose} disabled={state === 'adding'}>
+            Закрыть
+          </button>
+          {(state === 'list' || state === 'adding') && list.length > 0 && (
+            <button className="btn primary" onClick={add} disabled={!sel.size || state === 'adding'}>
+              {state === 'adding' ? <span className="spinner" /> : null} Добавить выбранные ({sel.size})
+            </button>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

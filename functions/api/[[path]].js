@@ -27,7 +27,7 @@ import { detectDietType } from '../../web/src/shared/dietType.js';
 import { labelSizeById } from '../../web/src/shared/labelSizes.js';
 import { printVariantById } from '../../web/src/shared/printVariants.js';
 import { Iiko } from '../../web/src/shared/iiko.js';
-import { buildNomenclatureItems, polishComposition } from '../../web/src/shared/iikoSync.js';
+import { buildNomenclatureItems, polishComposition, findNewDishes } from '../../web/src/shared/iikoSync.js';
 
 
 let ADMIN_TOKEN = '';
@@ -627,6 +627,64 @@ async function route(req) {
         const job = await enqueueJob({ kind: 'sync', user: body.user || 'admin', dish: { name: '[СИНХРОНИЗАЦИЯ iiko]' } });
         await logEvent('info', 'sync', `Запрошена синхронизация (агент), задание #${job.id}`);
         return json({ ok: true, mode: 'agent', jobId: job.id });
+      }
+      // новые блюда из iiko: без body.add — только список (превью); с body.add=[артикулы] — добавить
+      if (seg[1] === 'new-dishes' && method === 'POST') {
+        if (!isAdmin(req)) return denyAdmin();
+        if (!IIKO_CFG || !IIKO_CFG.host || !IIKO_CFG.login) {
+          return json({ ok: false, error: 'Облачное подключение к iiko не настроено (секреты IIKO_*).' }, 400);
+        }
+        const settings = await loadSettings();
+        const iiko = new Iiko(IIKO_CFG);
+        try {
+          await iiko.auth();
+          const { items, products } = await buildNomenclatureItems(iiko, settings);
+          const dishes = await loadDishes();
+          const candidates = findNewDishes({ products, items, dishes });
+          if (!Array.isArray(body.add)) return json({ ok: true, candidates });
+
+          const want = new Set(body.add.map((x) => String(x)));
+          const now = new Date().toISOString();
+          let nextId = dishes.reduce((m, d) => Math.max(m, d.id || 0), 0) + 1;
+          const added = [];
+          for (const c of candidates) {
+            if (!want.has(c.num || c.code || c.name)) continue;
+            dishes.push({
+              id: nextId++,
+              name: c.name,
+              artikul: c.num || null,
+              code: c.code || null,
+              type: 'Блюдо',
+              category: c.category,
+              category_source: 'iiko',
+              composition: c.composition || null,
+              composition_source: c.composition ? 'iiko' : null,
+              kcal: null,
+              protein: null,
+              fat: null,
+              carbs: null,
+              nutrition_source: null,
+              shelf_life_hours: null,
+              storage_text: null,
+              barcode_source: null,
+              diet_type: null,
+              active: 1,
+              iiko_id: c.iikoId,
+              iiko_synced_at: now,
+              created_at: now,
+              updated_at: now,
+            });
+            added.push(c.name);
+          }
+          if (added.length) await setJSON('dishes', dishes); // одной записью — без потерь
+          await logEvent('info', 'sync', `Новые блюда из iiko: добавлено ${added.length}`);
+          return json({ ok: true, added: added.length, names: added });
+        } catch (e) {
+          await logEvent('error', 'sync', 'Новые блюда из iiko: ' + String(e?.message || e));
+          return json({ ok: false, error: 'iiko: ' + String(e?.message || e) }, 502);
+        } finally {
+          await iiko.logout();
+        }
       }
       // агент присылает готовые состав + КБЖУ
       if (seg[1] === 'nomenclature' && method === 'POST') {

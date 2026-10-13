@@ -242,5 +242,56 @@ export async function buildNomenclatureItems(iiko, settings = {}, log = () => {}
     compositions: compCount,
   };
   log(`подготовлено ${items.length} позиций, состав у ${compCount}`);
-  return { items, stats };
+  return { items, stats, products };
+}
+
+const normDishName = (s) =>
+  String(s || '')
+    .toLowerCase()
+    .replace(/ё/g, 'е')
+    .replace(/[«»"'`“”„]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+/**
+ * Блюда iiko (тип DISH, не удалённые), которых ещё нет на сайте (по артикулу, коду, названию).
+ * Категория — по группе iiko: берём категорию, которая чаще всего стоит на сайте у блюд
+ * из той же группы iiko. Состав — из техкарты (`items`); если техкарты нет — пусто
+ * (ничего не придумываем, админ заполнит вручную).
+ * @returns {{name,num,code,category,composition,iikoId}[]}
+ */
+export function findNewDishes({ products = [], items = [], dishes = [] }) {
+  const byArt = new Map(dishes.filter((d) => d.artikul).map((d) => [String(d.artikul).trim(), d]));
+  const codes = new Set(dishes.filter((d) => d.code).map((d) => String(d.code).trim()));
+  const names = new Set(dishes.map((d) => normDishName(d.name)));
+
+  const votes = new Map();
+  for (const p of products) {
+    const d = byArt.get(String(p?.num ?? '').trim());
+    if (!d || !d.category || !p.parent) continue;
+    const k = String(p.parent);
+    if (!votes.has(k)) votes.set(k, new Map());
+    const v = votes.get(k);
+    v.set(d.category, (v.get(d.category) || 0) + 1);
+  }
+  const categoryOf = (parent) => {
+    const v = votes.get(String(parent));
+    if (!v) return null;
+    return [...v.entries()].sort((a, b) => b[1] - a[1])[0][0];
+  };
+  const comp = new Map(items.map((it) => [String(it.iikoId), it.composition || '']));
+
+  const out = [];
+  for (const p of products) {
+    if (!p || p.deleted || String(p.type || '').toUpperCase() !== 'DISH') continue;
+    const name = String(p.name || '').trim();
+    if (!name) continue;
+    const num = p.num != null ? String(p.num).trim() : '';
+    const code = p.code != null ? String(p.code).trim() : '';
+    if ((num && byArt.has(num)) || (code && codes.has(code)) || names.has(normDishName(name))) continue;
+    const category = categoryOf(p.parent);
+    if (!category) continue; // группа iiko, из которой на сайте нет ни одного блюда — не наше меню
+    out.push({ name, num, code, category, composition: comp.get(String(p.id)) || '', iikoId: String(p.id) });
+  }
+  return out.sort((a, b) => (a.category + a.name).localeCompare(b.category + b.name, 'ru'));
 }
