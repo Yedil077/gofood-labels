@@ -91,6 +91,16 @@ export const api = {
     }>('/sync/new-dishes', { method: 'POST', body: JSON.stringify(add ? { add } : {}) }),
 
   history: (limit = 200) => req<{ jobs: PrintJob[] }>(`/history?limit=${limit}`),
+  /** Записать печать через браузер в историю. */
+  logPrint: (body: {
+    dishId: number;
+    quantity: number;
+    labelDate?: string;
+    labelTime?: string;
+    labelSize?: string;
+    variant?: string;
+    user?: string;
+  }) => req<{ ok: boolean }>('/print/log', { method: 'POST', body: JSON.stringify(body) }),
   logs: () => req<{ logs: LogRow[] }>('/logs'),
   clearLogs: () => req('/logs', { method: 'DELETE' }),
 };

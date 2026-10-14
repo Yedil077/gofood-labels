@@ -50,6 +50,8 @@ export interface PrintJob {
   error?: string | null;
   agent?: string;
   finishedAt?: string;
+  labelSize?: string;
+  variant?: string;
 }
 
 export interface LogRow {

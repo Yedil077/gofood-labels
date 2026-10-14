@@ -18,9 +18,23 @@ import { normalizeDishForLabel } from '../shared/normalize.js';
 // @ts-ignore
 import { groupOf, buildTree } from '../shared/categories.js';
 import { printViaBrowser } from '../label/printBrowser';
-import type { Dish, Settings } from '../types';
+import type { Dish, Settings, PrintJob } from '../types';
 
 type View = 'groups' | 'dishes' | 'dish';
+
+/** Сегодня по местному времени кухни (часы этого компьютера). */
+function isToday(iso: string) {
+  const d = new Date(iso);
+  const n = new Date();
+  return d.getFullYear() === n.getFullYear() && d.getMonth() === n.getMonth() && d.getDate() === n.getDate();
+}
+const hhmm = (iso: string) => new Date(iso).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+/** 1 раз, 2 раза, 5 раз */
+function razWord(n: number) {
+  const a = Math.abs(n) % 100;
+  const b = a % 10;
+  return b >= 2 && b <= 4 && (a < 12 || a > 14) ? 'раза' : 'раз';
+}
 
 export default function PrintPage() {
   const [settings, setSettings] = useState<Settings | null>(null);
@@ -52,6 +66,20 @@ export default function PrintPage() {
     return () => clearInterval(id);
   }, []);
   useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current); }, []);
+
+  // история печати за сегодня (все устройства) — чтобы не напечатать одно и то же дважды
+  const [history, setHistory] = useState<PrintJob[]>([]);
+  function loadHistory() {
+    api
+      .history(400)
+      .then((r) => setHistory((r.jobs || []).filter((j) => j.kind === 'label' && isToday(j.createdAt))))
+      .catch(() => {});
+  }
+  useEffect(() => {
+    loadHistory();
+    const id = setInterval(loadHistory, 30000);
+    return () => clearInterval(id);
+  }, []);
 
   const dtCfg = settings?.datetime;
   const dt = useMemo(() => (dtCfg ? calculateLabelDateTime(localKey(now), dtCfg) : null), [dtCfg, now]);
@@ -157,6 +185,7 @@ export default function PrintPage() {
           note: r.approximateTime ? 'Время рассчитано приблизительно.' : undefined,
         });
         watchJob(r.jobId);
+        loadHistory();
       } else {
         setResult({ kind: 'err', text: r.error || 'Не удалось создать задание' });
       }
@@ -310,6 +339,18 @@ export default function PrintPage() {
               {dish.category || 'без категории'} · Код {dish.code || '—'}
             </div>
 
+            {(() => {
+              const done = history.filter((j) => j.dish?.id === dish.id);
+              if (!done.length) return null;
+              const total = done.reduce((a, j) => a + (Number(j.quantity) || 0), 0);
+              return (
+                <div className="banner warn" style={{ marginTop: 12 }}>
+                  <b>Сегодня уже печатали: {total} шт.</b>{' '}
+                  ({done.map((j) => `${hhmm(j.createdAt)} — ${j.quantity} шт.`).join(', ')})
+                </div>
+              );
+            })()}
+
             <div style={{ marginTop: 14 }}>
               <WarningsPanel warnings={dish.warnings} />
             </div>
@@ -379,7 +420,22 @@ export default function PrintPage() {
             <div style={{ marginTop: 18 }}>
               <button
                 className="btn primary big"
-                onClick={() => printData && printViaBrowser(printData, rp as any, qty)}
+                onClick={() => {
+                  if (!printData || !dish) return;
+                  printViaBrowser(printData, rp as any, qty);
+                  api
+                    .logPrint({
+                      dishId: dish.id,
+                      quantity: qty,
+                      labelDate: printData.dateStr,
+                      labelTime: printData.timeStr,
+                      labelSize: size.id,
+                      variant: variant.id,
+                      user: localStorage.getItem('kitchenUser') || 'kitchen',
+                    })
+                    .then(loadHistory)
+                    .catch(() => {});
+                }}
               >
                 🖨 ПЕЧАТЬ{qty > 1 ? ` · ${qty} шт.` : ''}
               </button>
@@ -412,6 +468,65 @@ export default function PrintPage() {
           {printData && <LabelPreview data={printData} rp={rp} />}
         </div>
       )}
+
+      {/* История печати за сегодня — со всех устройств */}
+      <div className="card" style={{ marginTop: 18 }}>
+        <div className="row" style={{ justifyContent: 'space-between' }}>
+          <h2 style={{ margin: 0 }}>
+            История печати за сегодня{' '}
+            <span className="muted" style={{ fontSize: 14 }}>
+              · {history.length} {razWord(history.length)},{' '}
+              {history.reduce((a, j) => a + (Number(j.quantity) || 0), 0)} шт.
+            </span>
+          </h2>
+          <button className="btn" onClick={loadHistory}>Обновить</button>
+        </div>
+        {!history.length ? (
+          <p className="muted">Сегодня ещё ничего не печатали.</p>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ marginTop: 10 }}>
+              <thead>
+                <tr>
+                  <th>Время</th><th>Блюдо</th><th>Кол-во</th><th>На этикетке</th><th>Размер</th><th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {history.slice(0, 200).map((j) => {
+                  const d = dishes.find((x) => x.id === j.dish?.id);
+                  return (
+                    <tr key={j.id}>
+                      <td className="mono">{hhmm(j.createdAt)}</td>
+                      <td>
+                        {j.dish?.name}
+                        {j.variant === 'aidar' && <span className="tag muted"> Айдар</span>}
+                      </td>
+                      <td><b>{j.quantity}</b></td>
+                      <td className="mono">{j.labelDate} {j.labelTime}</td>
+                      <td className="muted">{labelSizeById(j.labelSize || '')?.title || '—'}</td>
+                      <td className="right">
+                        {d && (
+                          <button
+                            className="btn"
+                            onClick={() => {
+                              setSelGroup(groupOf(d.category).group);
+                              setSelSub('');
+                              openDish(d);
+                              window.scrollTo({ top: 0, behavior: 'smooth' });
+                            }}
+                          >
+                            Открыть
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
 
       {confirm && (
         <div className="modal-bg" onClick={() => setConfirm(null)}>

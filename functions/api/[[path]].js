@@ -571,6 +571,33 @@ async function route(req) {
       });
     }
 
+    // запись в историю печати через браузер (кнопка «ПЕЧАТЬ»). Статус 'browser' —
+    // агент берёт только 'queued', поэтому повторно это никто не напечатает.
+    if (path === '/print/log' && method === 'POST') {
+      const dishes = await loadDishes();
+      const dish = dishes.find((d) => d.id === Number(body.dishId));
+      if (!dish) return json({ ok: false, error: 'Блюдо не найдено' }, 404);
+      const now = new Date().toISOString();
+      const job = {
+        id: Date.now() * 1000 + Math.floor(Math.random() * 1000),
+        createdAt: now,
+        finishedAt: now,
+        kind: 'label',
+        status: 'browser',
+        via: 'browser',
+        quantity: Math.max(1, Math.min(999, Number(body.quantity) || 1)),
+        user: String(body.user || 'kitchen').slice(0, 60),
+        dish: { id: dish.id, name: dish.name, code: dish.code, artikul: dish.artikul },
+        labelDate: String(body.labelDate || '').slice(0, 20),
+        labelTime: String(body.labelTime || '').slice(0, 10),
+        labelSize: String(body.labelSize || '').slice(0, 10),
+        variant: String(body.variant || '').slice(0, 20),
+      };
+      await putJob(job);
+      await trimJobs(1000);
+      return json({ ok: true, job });
+    }
+
     if (path === '/print/test' && method === 'POST') {
       if (!isAdmin(req)) return denyAdmin();
       const settings = await loadSettings();
@@ -771,7 +798,7 @@ async function route(req) {
           'print',
           `Задание #${job.id} (${job.dish?.name || ''}) → ${job.status}` + (body.error ? `: ${body.error}` : '')
         );
-        await trimJobs(200);
+        await trimJobs(1000);
         return json({ ok: true, job });
       }
       if (method === 'DELETE') {

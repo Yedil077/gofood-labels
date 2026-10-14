@@ -4,6 +4,7 @@ import type { PrintJob } from '../../types';
 
 const tagOf: Record<string, string> = {
   success: 'ok',
+  browser: 'ok',
   'dry-run': 'muted',
   error: 'err',
   printing: 'warn',
@@ -41,7 +42,7 @@ export default function HistoryTab() {
               <td>{j.quantity}</td>
               <td className="mono">{j.labelDate} {j.labelTime}</td>
               <td>{j.user}</td>
-              <td>{j.agent || '—'}</td>
+              <td>{j.agent || (j.via === 'browser' ? 'браузер' : '—')}</td>
               <td>
                 <span className={'tag ' + (tagOf[j.status] || 'muted')}>{j.status}</span>
                 {j.error && <div className="muted" style={{ fontSize: 11 }}>{j.error}</div>}
