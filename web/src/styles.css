@@ -752,6 +752,15 @@ h1 {
   border-radius: 14px;
   box-shadow: 0 6px 18px color-mix(in srgb, var(--orange) 30%, transparent);
 }
+.btn.ghost-link {
+  background: none;
+  border: none;
+  color: var(--muted);
+  text-decoration: underline;
+  min-height: 0;
+  justify-self: start;
+  padding: 4px 0;
+}
 .btn.ghost.back {
   padding: 4px 0;
   min-height: 0;

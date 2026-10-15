@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import {
   enqueue, claimNext, progress, complete, cancel, retry, hideFinished, listQueue,
-  recoverStale, recoverAgent, pendingCount, getJob, STALE_MS, MAX_AUTO_ATTEMPTS,
+  recoverStale, recoverAgent, pendingCount, getJob, voidBrowser, STALE_MS, MAX_AUTO_ATTEMPTS,
 } from '../printQueue.js';
 
 /** Минимальный адаптер node:sqlite → API Cloudflare D1. */
@@ -159,4 +159,13 @@ test('запись о печати через браузер не попадае
   await enqueue(db, { ...job('A'), status: 'browser' }, T0);
   assert.ok((await claimNext(db, 'agent', T0 + 1)).empty);
   assert.equal(await pendingCount(db), 0);
+});
+
+test('«не печаталось»: отменяется только запись «через браузер»', async () => {
+  const db = d1();
+  const b = await enqueue(db, { ...job('Каша', 39), status: 'browser' }, T0);
+  const q = await enqueue(db, job('Суп'), T0 + 1);
+  assert.equal(await voidBrowser(db, b.id, T0 + 2), true);
+  assert.equal((await getJob(db, b.id)).status, 'cancelled');
+  assert.equal(await voidBrowser(db, q.id, T0 + 3), false, 'задание очереди так не отменяется');
 });

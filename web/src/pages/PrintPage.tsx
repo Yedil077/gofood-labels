@@ -86,6 +86,16 @@ export default function PrintPage() {
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<null | { kind: 'ok' | 'err' | 'warn'; text: string }>(null);
   const [confirm, setConfirm] = useState<null | { warnings: { code: string; text: string }[] }>(null);
+  // после печати через браузер: «напечаталось?» — только тогда пишем в историю
+  const [askPrinted, setAskPrinted] = useState<null | {
+    dishId: number;
+    name: string;
+    quantity: number;
+    labelDate?: string;
+    labelTime?: string;
+    labelSize: string;
+    variant: string;
+  }>(null);
   const { info: queue, error: queueErr, reload: reloadQueue } = useQueue(5000);
 
   useEffect(() => {
@@ -238,23 +248,37 @@ export default function PrintPage() {
   }
 
   /** Запасной путь: окно печати браузера (пустая этикетка — последней страницей того же документа). */
+  /** Печать через окно браузера. В историю пишем, только если человек подтвердил, что напечаталось. */
   function viaBrowser() {
     if (!printData || !dish) return;
     if (!confirmRepeat()) return;
     printViaBrowser(printData, rp as any, run.filled, run.blank);
     saveQty(dish.id, qty);
+    setAskPrinted({
+      dishId: dish.id,
+      name: dish.name,
+      quantity: qty,
+      labelDate: printData.dateStr,
+      labelTime: printData.timeStr,
+      labelSize: size.id,
+      variant: variant.id,
+    });
+  }
+  function answerPrinted(yes: boolean) {
+    const a = askPrinted;
+    setAskPrinted(null);
+    if (!yes || !a) return;
+    const { name, ...body } = a;
     api
-      .logPrint({
-        dishId: dish.id,
-        quantity: qty,
-        labelDate: printData.dateStr,
-        labelTime: printData.timeStr,
-        labelSize: size.id,
-        variant: variant.id,
-        user: kitchenUser(),
-      })
+      .logPrint({ ...body, user: kitchenUser() })
       .then(loadHistory)
       .catch(() => {});
+  }
+  async function voidEntry(id: string | number, name?: string) {
+    if (!window.confirm(`Отметить «${name || ''}» как НЕ напечатанное? Запись перестанет считаться в «уже печатали».`)) return;
+    const r: any = await api.queueVoid(String(id));
+    setToast(r?.ok ? { kind: 'ok', text: 'Отмечено: не печаталось' } : { kind: 'err', text: r?.error || 'Не получилось' });
+    loadHistory();
   }
 
   /* ------------------------------- РЕНДЕР ------------------------------- */
@@ -445,29 +469,18 @@ export default function PrintPage() {
             })()}
 
             <div className="actions">
-              {online ? (
-                <>
-                  <button className="btn primary big" disabled={busy} onClick={() => toQueue(false)}>
-                    {busy ? <span className="spinner" /> : '🖨'} ПЕЧАТЬ{qty > 1 ? ` · ${qty} шт.` : ''}
-                  </button>
-                  <button className="btn" onClick={viaBrowser} title="Окно печати браузера на этом компьютере">
-                    Через браузер
-                  </button>
-                  <div className="muted small">Задание уйдёт в общую очередь, принтер напечатает сам.</div>
-                </>
-              ) : (
-                <>
-                  <button className="btn primary big" onClick={viaBrowser}>
-                    🖨 ПЕЧАТЬ{qty > 1 ? ` · ${qty} шт.` : ''}
-                  </button>
-                  <button className="btn" disabled={busy} onClick={() => toQueue(false)} title="Напечатается, когда запустят Print Agent">
-                    {busy ? <span className="spinner" /> : null} В очередь (агент не на связи)
-                  </button>
-                  <div className="muted small">
-                    Откроется окно печати: принтер EPSON CW-C4030, «Поля» — нет, «Масштаб» — 100 %.
-                  </div>
-                </>
-              )}
+              {/* «ПЕЧАТЬ» — всегда в общую очередь; печать через браузер — только отдельной кнопкой */}
+              <button className="btn primary big" disabled={busy} onClick={() => toQueue(false)}>
+                {busy ? <span className="spinner" /> : '🖨'} ПЕЧАТЬ{qty > 1 ? ` · ${qty} шт.` : ''}
+              </button>
+              <div className="muted small">
+                {online
+                  ? 'Задание уйдёт в общую очередь, принтер напечатает сам.'
+                  : 'Агент не на связи: задание встанет в очередь и напечатается, когда его запустят.'}
+              </div>
+              <button className="btn small ghost-link" onClick={viaBrowser} title="Окно печати браузера на этом компьютере">
+                Через браузер (вручную, с окном печати)
+              </button>
             </div>
           </section>
 
@@ -544,6 +557,11 @@ export default function PrintPage() {
                             Открыть
                           </button>
                         )}
+                        {j.status === 'browser' && (
+                          <button className="btn small" style={{ marginLeft: 6 }} onClick={() => voidEntry(j.id, j.dish?.name)}>
+                            Не печаталось
+                          </button>
+                        )}
                       </td>
                     </tr>
                   );
@@ -555,6 +573,22 @@ export default function PrintPage() {
       </div>
 
       {toast && <div className={'toast ' + toast.kind}>{toast.text}</div>}
+
+      {askPrinted && (
+        <div className="modal-bg">
+          <div className="modal" style={{ maxWidth: 440 }}>
+            <h2>Этикетки напечатались?</h2>
+            <p className="muted">
+              «{askPrinted.name}» — {askPrinted.quantity} шт. Если окно печати закрыли без печати, нажмите «Нет» — в
+              историю ничего не запишется.
+            </p>
+            <div className="row wrap" style={{ justifyContent: 'flex-end' }}>
+              <button className="btn" onClick={() => answerPrinted(false)}>Нет, не печатал</button>
+              <button className="btn primary" onClick={() => answerPrinted(true)}>Да, напечатано</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {confirm && (
         <div className="modal-bg" onClick={() => setConfirm(null)}>

@@ -716,6 +716,11 @@ async function route(req) {
           ? json({ ok: true })
           : json({ ok: false, error: 'Отменить можно только задание «В очереди» — это уже передано принтеру.' }, 409);
       }
+      if (seg[2] === 'void' && method === 'POST') {
+        const ok = await Q.voidBrowser(db, id);
+        if (ok) await logEvent('info', 'print', `Запись «через браузер» отмечена как не напечатанная (${id})`);
+        return ok ? json({ ok: true }) : json({ ok: false, error: 'Так можно отменить только запись «Через браузер».' }, 409);
+      }
       if (seg[2] === 'retry' && method === 'POST') {
         const ok = await Q.retry(db, id);
         return ok ? json({ ok: true }) : json({ ok: false, error: 'Повторить можно ошибку, «неизвестно» или отменённое.' }, 409);

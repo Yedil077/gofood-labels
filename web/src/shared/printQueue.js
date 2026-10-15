@@ -274,6 +274,19 @@ export async function cancel(db, id, now = Date.now()) {
   return changes(r) === 1;
 }
 
+/** Запись «Через браузер», которая на деле не печаталась (закрыли окно печати), — отменить. */
+export async function voidBrowser(db, id, now = Date.now()) {
+  await ensureQueueSchema(db);
+  const r = await db
+    .prepare(
+      `UPDATE print_jobs SET status='cancelled', finished_at=?, note='отмечено: не печаталось (через браузер)'
+       WHERE id=? AND status='browser'`
+    )
+    .bind(iso(now), id)
+    .run();
+  return changes(r) === 1;
+}
+
 /** Ручной повтор: ошибка / неизвестно / отменено → в конец очереди. */
 export async function retry(db, id, now = Date.now()) {
   await ensureQueueSchema(db);
