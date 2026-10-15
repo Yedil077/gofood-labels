@@ -20,17 +20,18 @@ export default function LabelPreview({ data, rp }: Props) {
     }
   }, [JSON.stringify(data), JSON.stringify(rp)]);
 
-  const boxW = 380;
-  const cssW = oneToOne ? `${rp.widthMm}mm` : `${boxW}px`;
-  const cssH = oneToOne ? `${rp.heightMm}mm` : `${Math.round((boxW * rp.heightMm) / rp.widthMm)}px`;
+  // по ширине колонки, пропорции носителя; круг — не шире 340 px
+  const round = rp.widthMm === rp.heightMm;
+  const frameStyle = oneToOne
+    ? { width: `${rp.widthMm}mm`, height: `${rp.heightMm}mm` }
+    : { width: '100%', maxWidth: round ? 340 : 460, aspectRatio: `${rp.widthMm} / ${rp.heightMm}` };
 
   return (
     <div className="preview-box">
       <div className="preview-cap">
-        PREVIEW ЭТИКЕТКИ ·{' '}
-        {rp.widthMm === rp.heightMm ? `круг Ø${rp.widthMm} мм` : `${rp.widthMm} × ${rp.heightMm} мм`}
+        ПРЕВЬЮ ЭТИКЕТКИ · {round ? `круг Ø${rp.widthMm} мм` : `${rp.widthMm} × ${rp.heightMm} мм`}
       </div>
-      <div className="preview-frame" style={{ width: cssW, height: cssH }}>
+      <div className="preview-frame" style={frameStyle}>
         <canvas ref={canvasRef} style={{ width: '100%', height: '100%', display: 'block' }} />
       </div>
       <label className="row" style={{ gap: 6, cursor: 'pointer', fontSize: 12 }}>

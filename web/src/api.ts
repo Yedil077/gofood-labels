@@ -1,6 +1,6 @@
 import * as XLSX from 'xlsx';
 import { API_BASE, getToken } from './config';
-import type { Dish, Settings, PrintJob, LogRow, ImportResult, LabelDateTime } from './types';
+import type { Dish, Settings, PrintJob, LogRow, ImportResult, LabelDateTime, QueueInfo } from './types';
 
 async function req<T = any>(path: string, init?: RequestInit): Promise<T> {
   const headers: Record<string, string> = { ...(init?.headers as any) };
@@ -91,6 +91,11 @@ export const api = {
     }>('/sync/new-dishes', { method: 'POST', body: JSON.stringify(add ? { add } : {}) }),
 
   history: (limit = 200) => req<{ jobs: PrintJob[] }>(`/history?limit=${limit}`),
+  /** Общая очередь печати. summary=true — только счётчик и статус агента. */
+  queue: (summary = false) => req<QueueInfo>(`/queue${summary ? '?summary=1' : ''}`),
+  queueCancel: (id: string) => req<{ ok: boolean; error?: string }>(`/queue/${id}/cancel`, { method: 'POST', body: '{}' }),
+  queueRetry: (id: string) => req<{ ok: boolean; error?: string }>(`/queue/${id}/retry`, { method: 'POST', body: '{}' }),
+  queueClear: () => req<{ ok: boolean; hidden: number }>('/queue/clear', { method: 'POST', body: '{}' }),
   /** Записать печать через браузер в историю. */
   logPrint: (body: {
     dishId: number;

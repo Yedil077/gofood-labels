@@ -10,6 +10,12 @@ export function initStore(env) {
   DB = (env && (env.GOFOOD_DB || env.DB)) || null;
 }
 
+/** Прямой доступ к D1 (очередь печати — отдельная таблица print_jobs). */
+export function getDB() {
+  requireDB();
+  return DB;
+}
+
 function requireDB() {
   if (!DB) throw new Error('D1 binding GOFOOD_DB не настроен (wrangler.toml / Pages → Settings → Functions → D1)');
 }

@@ -6,6 +6,7 @@ import { renderJob } from './render.js';
 import { buildPdf } from './pdf.js';
 import { printPdf, listPrinters } from './print.js';
 import { runSync } from './sync.js';
+import { watchSpool, defaultPrinter } from './spooler.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..');
@@ -40,7 +41,8 @@ function loadConfig() {
     console.error('  Скопируйте agent-config.example.json → agent-config.json и заполните.\n');
     process.exit(1);
   }
-  const cfg = JSON.parse(fs.readFileSync(p, 'utf8'));
+  // BOM в начале файла (Блокнот Windows, PowerShell) ломал JSON.parse — убираем
+  const cfg = JSON.parse(fs.readFileSync(p, 'utf8').replace(/^﻿/, ''));
   cfg.apiBase = String(cfg.apiBase || '').replace(/\/$/, '');
   cfg.pollMs = Number(cfg.pollMs) || 2000;
   cfg.helloMs = Number(cfg.helloMs) || 15000;
@@ -62,16 +64,19 @@ async function jfetch(url, init) {
 }
 let printersCache = [];
 let lastSyncAt = null;
+let activePrinter = '';
 async function sayHello() {
   try {
     printersCache = await listPrinters();
+    activePrinter = await resolvePrinter();
     await jfetch(API('/agent/hello'), {
       method: 'POST',
       body: JSON.stringify({
         agent: cfg.name,
         platform: process.platform,
         printers: printersCache,
-        version: '2.1.0',
+        printer: activePrinter,
+        version: '3.0.0',
         lastSyncAt,
         iikoConfigured: !!(cfg.iiko && cfg.iiko.host && cfg.iiko.login),
       }),
@@ -89,7 +94,105 @@ async function getSettings() {
   }
 }
 
-/* --------------------------------- печать --------------------------------- */
+/* ------------------------- очередь печати (v3) ------------------------- */
+
+let settingsCache = {};
+async function resolvePrinter() {
+  settingsCache = await getSettings();
+  return cfg.printerName || settingsCache['printer.name'] || (await defaultPrinter()) || '';
+}
+
+/**
+ * Одно задание из общей очереди. Порядок важен:
+ *  1) рендер + PDF (ошибка здесь безопасна — сервер вернёт задание в очередь);
+ *  2) сервер ПОДТВЕРДИЛ «submitted» — только после этого отдаём принтеру
+ *     (иначе при обрыве связи задание напечаталось бы дважды);
+ *  3) печать → наблюдение за спулером Windows → итог.
+ * Всё это время раз в 10 с шлём heartbeat — иначе сервер сочтёт задание зависшим.
+ */
+async function processQueueJob(job) {
+  const p = job.payload || {};
+  const blank = Number(job.blank) || 0;
+  const filled = Number(job.filled) || 1;
+  const tag = `q${String(job.id).replace(/[^a-z0-9]/gi, '').slice(0, 10)}`;
+  const say = (stage) =>
+    jfetch(API(`/queue/${job.id}/progress`), { method: 'POST', body: JSON.stringify({ agent: cfg.name, stage }) });
+  const done = (r) =>
+    jfetch(API(`/queue/${job.id}/complete`), { method: 'POST', body: JSON.stringify({ agent: cfg.name, ...r }) }).catch(
+      (e) => console.warn('  complete:', e.message)
+    );
+  console.log(`→ ${job.dish_name || job.kind} ×${filled}${blank ? ' + 1 пустая' : ''}  [${job.id}]`);
+  const hb = setInterval(() => say('heartbeat').catch(() => {}), 10000);
+  try {
+    // 1) рендер
+    let pdf;
+    let png;
+    try {
+      png = await renderJob(job.kind === 'test' ? { kind: 'test', render: p.render } : { kind: 'label', label: p.label, render: p.render });
+      const copiesMode = blank ? 'pages' : p.render?.copiesMode || 'pages';
+      pdf = await buildPdf(png.buffer, { widthMm: png.widthMm, heightMm: png.heightMm, copies: filled, copiesMode, blank });
+    } catch (e) {
+      return await done({ result: 'error', error: 'Ошибка подготовки этикетки: ' + (e?.message || e), retryable: true });
+    }
+    // 2) сервер должен подтвердить, что задание уходит на принтер
+    let ok = false;
+    try {
+      ok = (await say('submitted')).ok;
+    } catch (e) {
+      console.warn('  нет связи с сервером перед печатью — не печатаю:', e.message);
+      return; // сервер сам вернёт задание в очередь (оно не было отправлено)
+    }
+    if (!ok) return console.warn('  задание больше не наше — пропуск');
+
+    // 3) печать
+    const printer = activePrinter || (await resolvePrinter());
+    const dryRun = cfg.dryRun || !!p.render?.dryRun;
+    const res = await printPdf(pdf, {
+      printer: printer || undefined,
+      copies: filled,
+      copiesMode: 'pages',
+      scale: p.render?.scale || 'noscale',
+      dryRun,
+      tag,
+    });
+    if (!res.ok) {
+      const timeout = /таймаут/i.test(res.error || '');
+      return await done({
+        result: timeout ? 'uncertain' : 'error',
+        error: (timeout ? 'Нет ответа от программы печати — могло напечататься. ' : '') + (res.error || 'ошибка печати'),
+      });
+    }
+    if (dryRun) return await done({ result: 'done', note: 'ТЕСТ-РЕЖИМ агента: PDF сохранён, на принтер не отправлялось' });
+
+    const v = await watchSpool({
+      printer,
+      tag,
+      pages: filled + blank,
+      onPrinting: () => say('printing').catch(() => {}),
+      onTick: null,
+    });
+    await done(v.result === 'uncertain' ? { result: 'uncertain', error: v.note } : { result: v.result, note: v.note });
+    console.log(`  ${v.result}: ${v.note}`);
+  } finally {
+    clearInterval(hb);
+  }
+}
+
+let queueBusy = false;
+async function queueTick() {
+  if (queueBusy) return;
+  queueBusy = true;
+  try {
+    const r = await jfetch(API('/queue/claim'), { method: 'POST', body: JSON.stringify({ agent: cfg.name }) });
+    if (r.job) await processQueueJob(r.job);
+  } catch (e) {
+    process.stdout.write('. ');
+  } finally {
+    queueBusy = false;
+  }
+}
+
+/* ------------------------ печать (прежний формат) ------------------------ */
 
 async function processPrintJob(job) {
   const printer = cfg.printerName || job.render?.printerName || undefined;
@@ -179,6 +282,7 @@ async function tick() {
   if (working) return;
   working = true;
   try {
+    // прежний формат (job/<id>) — теперь там только задания синхронизации; печать идёт через очередь
     const { jobs } = await jfetch(API('/jobs?status=queued'));
     for (const job of jobs.sort((a, b) => a.id - b.id)) {
       if (job.kind === 'sync') await doSync(job.id);
@@ -210,8 +314,17 @@ console.log(`  iiko:     ${cfg.iiko && cfg.iiko.host ? cfg.iiko.host : 'не н�
 console.log(`  Опрос:    каждые ${cfg.pollMs} мс${cfg.dryRun ? '  ·  ТЕСТ-РЕЖИМ (без печати)' : ''}\n`);
 
 await sayHello();
+// после перезапуска: незавершённые «наши» задания — в очередь (если не отправлены) или «неизвестно»
+try {
+  const r = await jfetch(API('/queue/recover'), { method: 'POST', body: JSON.stringify({ agent: cfg.name }) });
+  if (r.requeued || r.uncertain) console.log(`  восстановление: в очередь ${r.requeued}, «неизвестно» ${r.uncertain}`);
+} catch (e) {
+  console.warn('recover:', e.message);
+}
 setInterval(sayHello, cfg.helloMs);
-setInterval(tick, cfg.pollMs);
+setInterval(queueTick, cfg.pollMs);
+setInterval(tick, Math.max(cfg.pollMs, 5000));
+queueTick();
 setInterval(syncScheduler, 60 * 1000); // раз в минуту проверяем, не пора ли синхронизировать
 tick();
 setTimeout(syncScheduler, 8000); // первая синхронизация через 8 c после старта

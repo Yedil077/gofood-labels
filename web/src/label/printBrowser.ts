@@ -5,11 +5,26 @@ import { renderLabelAsync, type RenderParams } from './renderBrowser';
  * Открывает окно с изображением этикетки в физическом размере и вызывает диалог печати.
  * Пользователь выбирает принтер, ставит «Поля: нет» и «Масштаб: 100%».
  */
-export async function printViaBrowser(data: any, rp: RenderParams, copies = 1) {
+export async function printViaBrowser(data: any, rp: RenderParams, copies = 1, blank = 0) {
   const canvas = document.createElement('canvas');
   await renderLabelAsync(canvas, data, rp);
   const url = canvas.toDataURL('image/png');
   const n = Math.max(1, Math.min(999, Math.round(copies)));
+
+  // Пустая этикетка — такая же картинка того же размера, только целиком белая:
+  // тот же элемент и те же размеры → без смещений; последней страницей ТОГО ЖЕ документа
+  // (одно задание печати → один Cut в конце тиража).
+  const b = Math.max(0, Math.min(5, Math.round(blank)));
+  let blankUrl = '';
+  if (b) {
+    const c = document.createElement('canvas');
+    c.width = canvas.width;
+    c.height = canvas.height;
+    const ctx = c.getContext('2d')!;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, c.width, c.height);
+    blankUrl = c.toDataURL('image/png');
+  }
 
   const w = window.open('', 'gofood_print', 'width=480,height=360');
   if (!w) {
@@ -17,9 +32,10 @@ export async function printViaBrowser(data: any, rp: RenderParams, copies = 1) {
     return;
   }
 
-  const imgs = Array.from({ length: n }, (_, i) =>
-    `<img class="lbl${i === n - 1 ? ' last' : ''}" src="${url}" alt="этикетка"/>`
-  ).join('');
+  const srcs = [...Array.from({ length: n }, () => url), ...Array.from({ length: b }, () => blankUrl)];
+  const imgs = srcs
+    .map((s, i) => `<img class="lbl${i === srcs.length - 1 ? ' last' : ''}" src="${s}" alt="этикетка"/>`)
+    .join('');
 
   w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Печать этикетки</title>
 <style>

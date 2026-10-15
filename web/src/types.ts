@@ -36,7 +36,7 @@ export interface Dish {
 export type Settings = Record<string, any>;
 
 export interface PrintJob {
-  id: number;
+  id: number | string;
   createdAt: string;
   kind: string;
   status: string;
@@ -52,6 +52,38 @@ export interface PrintJob {
   finishedAt?: string;
   labelSize?: string;
   variant?: string;
+  blank?: number;
+}
+
+/** Строка общей очереди печати (таблица print_jobs). */
+export interface QueueJob {
+  id: string;
+  kind: string;
+  status: 'queued' | 'sending' | 'printing' | 'done' | 'sent' | 'error' | 'cancelled' | 'uncertain' | 'browser';
+  dish_id: number | null;
+  dish_name: string | null;
+  filled: number;
+  blank: number;
+  label_size: string | null;
+  variant: string | null;
+  label_date: string | null;
+  label_time: string | null;
+  user: string | null;
+  agent: string | null;
+  attempts: number;
+  error: string | null;
+  note: string | null;
+  created_at: string;
+  queued_at: string;
+  finished_at: string | null;
+}
+
+export interface QueueInfo {
+  jobs?: QueueJob[];
+  pending: number;
+  online: boolean;
+  printer: string;
+  agent: { name: string; printers: string[]; at: string; version?: string } | null;
 }
 
 export interface LogRow {

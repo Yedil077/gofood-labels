@@ -79,6 +79,7 @@ export default function SettingsTab() {
       'printer.dryRun': !!s!['printer.dryRun'],
       'print.copiesMode': s!['print.copiesMode'],
       'print.scale': s!['print.scale'],
+      'print.blankAtEnd': s!['print.blankAtEnd'] !== false,
       'label.widthMm': Number(s!['label.widthMm']) || 80,
       'label.heightMm': Number(s!['label.heightMm']) || 50,
       'label.dpi': Number(s!['label.dpi']) || 300,
@@ -219,6 +220,18 @@ export default function SettingsTab() {
         <label className="row" style={{ gap: 8, marginTop: 10 }}>
           <input type="checkbox" checked={!!s['printer.dryRun']} onChange={(e) => set('printer.dryRun', e.target.checked)} />
           Тест-режим агента: не печатать, только сохранять PDF
+        </label>
+        <label className="row" style={{ gap: 8, marginTop: 10, alignItems: 'flex-start' }}>
+          <input
+            type="checkbox"
+            checked={s['print.blankAtEnd'] !== false}
+            onChange={(e) => set('print.blankAtEnd', e.target.checked)}
+            style={{ marginTop: 4 }}
+          />
+          <span>
+            Добавлять пустую этикетку в конце тиража (для Cut): при 4 и больше этикетках печатается +1 белая
+            последней страницей того же задания. На экране печати не показывается — количество остаётся «чистым».
+          </span>
         </label>
       </div>
 

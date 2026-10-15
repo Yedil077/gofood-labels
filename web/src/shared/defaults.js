@@ -8,6 +8,8 @@ export const DEFAULTS = {
   'print.copiesMode': 'pages', // 'pages' | 'driver'
   'print.scale': 'noscale', // 'noscale' | 'fit' | 'shrink'
   'print.defaultCopies': 1,
+  // Пустая этикетка в конце тиража (для Cut Epson): при 4+ заполненных добавляется 1 пустая.
+  'print.blankAtEnd': true,
 
   // Геометрия этикетки (физический носитель — 80×50 мм, альбомный: ширина 80, высота 50).
   // Носитель ≥ 95×65 (старый 100×70) автоматически рисуется классическим макетом.

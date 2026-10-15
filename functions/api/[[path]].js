@@ -7,7 +7,10 @@ import {
   deleteJob,
   trimJobs,
   initStore,
+  getDB,
 } from '../_lib/store.js';
+import * as Q from '../../web/src/shared/printQueue.js';
+import { calcPrintRun, blankEnabledFrom } from '../../web/src/shared/printRun.js';
 import { mergeSettings, SETTINGS_KEYS, DISH_EDITABLE } from '../../web/src/shared/defaults.js';
 import { parseRows } from '../../web/src/shared/importParse.js';
 import { parseKbjuRows } from '../../web/src/shared/parseKbju.js';
@@ -548,22 +551,27 @@ async function route(req) {
         render.widthMm = chosen.widthMm;
         render.heightMm = chosen.heightMm;
       }
-      const job = await enqueueJob({
+      // тираж: заполненные + (при 4+ и включённой настройке) одна пустая в конце
+      const run = calcPrintRun(quantity, blankEnabledFrom(settings));
+      const job = await Q.enqueue(getDB(), {
         kind: 'label',
-        quantity,
-        user: body.user || 'kitchen',
-        dish: { id: dish.id, name: dish.name, code: dish.code, artikul: dish.artikul },
-        label,
-        render,
+        dishId: dish.id,
+        dishName: dish.name,
+        filled: run.filled,
+        blank: run.blank,
+        labelSize: chosen ? chosen.id : null,
+        variant: variant.id,
         labelDate: label.dateStr,
         labelTime: label.timeStr,
-        approximateTime: label.approximateTime,
+        user: String(body.user || 'kitchen').slice(0, 60),
+        payload: { label, render },
       });
-      await logEvent('info', 'print', `Задание #${job.id}: ${dish.name} ×${quantity}`);
+      await logEvent('info', 'print', `В очередь: ${dish.name} ×${run.filled}${run.blank ? ' + 1 пустая' : ''}`);
       return json({
         ok: true,
         jobId: job.id,
         status: job.status,
+        ...run,
         labelDate: label.dateStr,
         labelTime: label.timeStr,
         approximateTime: label.approximateTime,
@@ -577,41 +585,106 @@ async function route(req) {
       const dishes = await loadDishes();
       const dish = dishes.find((d) => d.id === Number(body.dishId));
       if (!dish) return json({ ok: false, error: 'Блюдо не найдено' }, 404);
-      const now = new Date().toISOString();
-      const job = {
-        id: Date.now() * 1000 + Math.floor(Math.random() * 1000),
-        createdAt: now,
-        finishedAt: now,
-        kind: 'label',
+      const settings = await loadSettings();
+      const run = calcPrintRun(body.quantity, blankEnabledFrom(settings));
+      const job = await Q.enqueue(getDB(), {
         status: 'browser',
-        via: 'browser',
-        quantity: Math.max(1, Math.min(999, Number(body.quantity) || 1)),
-        user: String(body.user || 'kitchen').slice(0, 60),
-        dish: { id: dish.id, name: dish.name, code: dish.code, artikul: dish.artikul },
+        kind: 'label',
+        dishId: dish.id,
+        dishName: dish.name,
+        filled: run.filled,
+        blank: run.blank,
+        labelSize: String(body.labelSize || '').slice(0, 10) || null,
+        variant: String(body.variant || '').slice(0, 20) || null,
         labelDate: String(body.labelDate || '').slice(0, 20),
         labelTime: String(body.labelTime || '').slice(0, 10),
-        labelSize: String(body.labelSize || '').slice(0, 10),
-        variant: String(body.variant || '').slice(0, 20),
-      };
-      await putJob(job);
-      await trimJobs(1000);
-      return json({ ok: true, job });
+        user: String(body.user || 'kitchen').slice(0, 60),
+      });
+      return json({ ok: true, job: Q.toHistoryJob(job) });
     }
 
     if (path === '/print/test' && method === 'POST') {
       if (!isAdmin(req)) return denyAdmin();
       const settings = await loadSettings();
-      const job = await enqueueJob({
+      const copies = Math.max(1, Math.min(10, Number(body.copies) || 1));
+      const job = await Q.enqueue(getDB(), {
         kind: 'test',
-        quantity: Math.max(1, Math.min(10, Number(body.copies) || 1)),
+        dishName: '[ТЕСТОВАЯ ПЕЧАТЬ]',
+        filled: copies,
+        blank: 0,
         user: body.user || 'admin',
-        dish: { name: '[ТЕСТОВАЯ ПЕЧАТЬ]' },
-        render: renderParams(settings),
-        labelDate: '',
-        labelTime: '',
+        payload: { render: renderParams(settings) },
       });
-      await logEvent('info', 'print', `Тестовая печать, задание #${job.id}`);
+      await logEvent('info', 'print', `Тестовая печать в очереди, ${copies} шт.`);
       return json({ ok: true, jobId: job.id, status: job.status });
+    }
+
+    /* --- очередь печати (общая для всех компьютеров кухни) --- */
+    if (seg[0] === 'queue') {
+      const db = getDB();
+      // для экранов кухни
+      if (seg.length === 1 && method === 'GET') {
+        await Q.recoverStale(db);
+        const info = await getJSON('agent-info', null);
+        const online = !!info?.at && Date.now() - new Date(info.at).getTime() < 45000;
+        const settings = await loadSettings();
+        const summary = url.searchParams.get('summary') === '1';
+        return json({
+          jobs: summary ? undefined : (await Q.listQueue(db)).map(({ payload, ...j }) => j),
+          pending: await Q.pendingCount(db),
+          agent: info ? { name: info.agent, printers: info.printers || [], at: info.at, version: info.version } : null,
+          online,
+          printer: settings['printer.name'] || info?.printer || '',
+        });
+      }
+      if (seg[1] === 'clear' && method === 'POST') return json({ ok: true, hidden: await Q.hideFinished(db) });
+
+      // для Print Agent
+      if (seg[1] === 'claim' && method === 'POST') {
+        if (!isAgent(req)) return denyAgent();
+        return json(await Q.claimNext(db, String(body.agent || 'agent')));
+      }
+      if (seg[1] === 'recover' && method === 'POST') {
+        if (!isAgent(req)) return denyAgent();
+        const r = await Q.recoverAgent(db, String(body.agent || 'agent'));
+        if (r.requeued || r.uncertain) await logEvent('warn', 'print', `Агент перезапущен: ${JSON.stringify(r)}`);
+        return json({ ok: true, ...r });
+      }
+
+      const id = String(seg[1] || '');
+      if (seg[2] === 'cancel' && method === 'POST') {
+        const ok = await Q.cancel(db, id);
+        return ok
+          ? json({ ok: true })
+          : json({ ok: false, error: 'Отменить можно только задание «В очереди» — это уже передано принтеру.' }, 409);
+      }
+      if (seg[2] === 'retry' && method === 'POST') {
+        const ok = await Q.retry(db, id);
+        return ok ? json({ ok: true }) : json({ ok: false, error: 'Повторить можно ошибку, «неизвестно» или отменённое.' }, 409);
+      }
+      if (seg[2] === 'progress' && method === 'POST') {
+        if (!isAgent(req)) return denyAgent();
+        return json({ ok: await Q.progress(db, id, String(body.agent || 'agent'), body.stage) });
+      }
+      if (seg[2] === 'complete' && method === 'POST') {
+        if (!isAgent(req)) return denyAgent();
+        const r = await Q.complete(db, id, String(body.agent || 'agent'), {
+          result: body.result,
+          error: body.error ? String(body.error).slice(0, 500) : null,
+          note: body.note ? String(body.note).slice(0, 300) : null,
+          retryable: !!body.retryable,
+        });
+        const j = await Q.getJob(db, id);
+        if (j) {
+          await logEvent(
+            j.status === 'error' || j.status === 'uncertain' ? 'error' : 'info',
+            'print',
+            `Печать «${j.dish_name || ''}» ×${j.filled}${j.blank ? '+1' : ''} → ${Q.STATUS_TEXT[j.status] || j.status}` +
+              (j.error ? `: ${j.error}` : '')
+          );
+        }
+        return json(r);
+      }
     }
 
     /* --- синхронизация с iiko --- */
@@ -728,7 +801,11 @@ async function route(req) {
     /* --- history --- */
     if (path === '/history' && method === 'GET') {
       const limit = Math.min(1000, Number(url.searchParams.get('limit')) || 200);
-      return json({ jobs: (await listJobs()).slice(0, limit) });
+      // новая очередь (print_jobs) + прежние записи job/<id> — вместе, новые сверху
+      const fresh = (await Q.listHistory(getDB(), limit)).map(Q.toHistoryJob);
+      const legacy = await listJobs();
+      const all = [...fresh, ...legacy].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+      return json({ jobs: all.slice(0, limit) });
     }
 
     /* --- logs --- */
@@ -753,6 +830,7 @@ async function route(req) {
           agent: body.agent || 'agent',
           platform: body.platform || null,
           printers: Array.isArray(body.printers) ? body.printers : [],
+          printer: body.printer || null, // принтер, на который агент реально печатает
           version: body.version || null,
           at: new Date().toISOString(),
         });
