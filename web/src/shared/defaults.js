@@ -11,6 +11,9 @@ export const DEFAULTS = {
   'print.defaultCopies': 1,
   // Пустая этикетка в конце тиража (для Cut Epson): при 4+ заполненных добавляется 1 пустая.
   'print.blankAtEnd': true,
+  // Что делает кнопка «ПЕЧАТЬ»: 'browser' — окно печати браузера (как раньше, по умолчанию);
+  // 'queue' — общая очередь, печатает Print Agent автоматически.
+  'print.mode': 'browser',
   // Профили печати (размер на сайте + очередь Windows / бумага / ориентация для агента).
   // Редактирует администратор; см. web/src/shared/labelSizes.js.
   'print.profiles': DEFAULT_PROFILES,

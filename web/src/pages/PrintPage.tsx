@@ -86,16 +86,6 @@ export default function PrintPage() {
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<null | { kind: 'ok' | 'err' | 'warn'; text: string }>(null);
   const [confirm, setConfirm] = useState<null | { warnings: { code: string; text: string }[] }>(null);
-  // после печати через браузер: «напечаталось?» — только тогда пишем в историю
-  const [askPrinted, setAskPrinted] = useState<null | {
-    dishId: number;
-    name: string;
-    quantity: number;
-    labelDate?: string;
-    labelTime?: string;
-    labelSize: string;
-    variant: string;
-  }>(null);
   const { info: queue, error: queueErr, reload: reloadQueue } = useQueue(5000);
 
   useEffect(() => {
@@ -184,6 +174,8 @@ export default function PrintPage() {
   );
   const doneTodayQty = doneToday.reduce((a, j) => a + (Number(j.quantity) || 0), 0);
   const online = !!queue?.online;
+  // режим кнопки «ПЕЧАТЬ» (Админ → Настройки): по умолчанию — окно печати браузера, как раньше
+  const queueMode = settings?.['print.mode'] === 'queue';
 
   function openGroup(g: string) {
     setSelGroup(g);
@@ -248,29 +240,22 @@ export default function PrintPage() {
   }
 
   /** Запасной путь: окно печати браузера (пустая этикетка — последней страницей того же документа). */
-  /** Печать через окно браузера. В историю пишем, только если человек подтвердил, что напечаталось. */
+  /** Печать через окно браузера (как раньше) — сразу записываем в историю; лишнее можно «Удалить». */
   function viaBrowser() {
     if (!printData || !dish) return;
     if (!confirmRepeat()) return;
     printViaBrowser(printData, rp as any, run.filled, run.blank);
     saveQty(dish.id, qty);
-    setAskPrinted({
-      dishId: dish.id,
-      name: dish.name,
-      quantity: qty,
-      labelDate: printData.dateStr,
-      labelTime: printData.timeStr,
-      labelSize: size.id,
-      variant: variant.id,
-    });
-  }
-  function answerPrinted(yes: boolean) {
-    const a = askPrinted;
-    setAskPrinted(null);
-    if (!yes || !a) return;
-    const { name, ...body } = a;
     api
-      .logPrint({ ...body, user: kitchenUser() })
+      .logPrint({
+        dishId: dish.id,
+        quantity: qty,
+        labelDate: printData.dateStr,
+        labelTime: printData.timeStr,
+        labelSize: size.id,
+        variant: variant.id,
+        user: kitchenUser(),
+      })
       .then(loadHistory)
       .catch(() => {});
   }
@@ -298,7 +283,7 @@ export default function PrintPage() {
             </span>
           )}
         </div>
-        <AgentStatus info={queue} error={queueErr} compact />
+        {queueMode && <AgentStatus info={queue} error={queueErr} compact />}
       </div>
 
       {/* Поиск доступен всегда */}
@@ -443,7 +428,7 @@ export default function PrintPage() {
             {(() => {
               // совпадает ли выбранный размер с рулоном в Epson и можно ли печатать сразу
               const roll = queue?.roll;
-              if (!roll || !online) return null;
+              if (!queueMode || !roll || !online) return null;
               const rollTitle = profileById(settings, roll.id)?.title || roll.id;
               if (roll.id !== size.id)
                 return (
@@ -469,22 +454,36 @@ export default function PrintPage() {
             })()}
 
             <div className="actions">
-              {/* «ПЕЧАТЬ» — всегда в общую очередь; печать через браузер — только отдельной кнопкой */}
-              <button className="btn primary big" disabled={busy} onClick={() => toQueue(false)}>
-                {busy ? <span className="spinner" /> : '🖨'} ПЕЧАТЬ{qty > 1 ? ` · ${qty} шт.` : ''}
-              </button>
-              <div className="muted small">
-                {online
-                  ? 'Задание уйдёт в общую очередь, принтер напечатает сам.'
-                  : 'Агент не на связи: задание встанет в очередь и напечатается, когда его запустят.'}
-              </div>
-              <button className="btn small ghost-link" onClick={viaBrowser} title="Окно печати браузера на этом компьютере">
-                Через браузер (вручную, с окном печати)
-              </button>
+              {queueMode ? (
+                <>
+                  {/* режим очереди: «ПЕЧАТЬ» — в общую очередь, печатает Print Agent */}
+                  <button className="btn primary big" disabled={busy} onClick={() => toQueue(false)}>
+                    {busy ? <span className="spinner" /> : '🖨'} ПЕЧАТЬ{qty > 1 ? ` · ${qty} шт.` : ''}
+                  </button>
+                  <div className="muted small">
+                    {online
+                      ? 'Задание уйдёт в общую очередь, принтер напечатает сам.'
+                      : 'Агент не на связи: задание встанет в очередь и напечатается, когда его запустят.'}
+                  </div>
+                  <button className="btn small ghost-link" onClick={viaBrowser} title="Окно печати браузера на этом компьютере">
+                    Через браузер (вручную, с окном печати)
+                  </button>
+                </>
+              ) : (
+                <>
+                  {/* как раньше: «ПЕЧАТЬ» сразу открывает окно печати браузера */}
+                  <button className="btn primary big" onClick={viaBrowser}>
+                    🖨 ПЕЧАТЬ{qty > 1 ? ` · ${qty} шт.` : ''}
+                  </button>
+                  <div className="muted small">
+                    Откроется окно печати: принтер EPSON CW-C4030, «Поля» — нет, «Масштаб» — 100 %.
+                  </div>
+                </>
+              )}
             </div>
           </section>
 
-          <section className="pl-queue card">
+          {queueMode && (<section className="pl-queue card">
             <div className="row" style={{ justifyContent: 'space-between' }}>
               <h2 style={{ margin: 0 }}>Очередь</h2>
               <Link to="/queue" className="small">Вся очередь →</Link>
@@ -504,7 +503,7 @@ export default function PrintPage() {
             ) : (
               <p className="muted small" style={{ margin: '8px 0 0' }}>Очередь пуста.</p>
             )}
-          </section>
+          </section>)}
         </div>
       )}
 
@@ -574,21 +573,6 @@ export default function PrintPage() {
 
       {toast && <div className={'toast ' + toast.kind}>{toast.text}</div>}
 
-      {askPrinted && (
-        <div className="modal-bg">
-          <div className="modal" style={{ maxWidth: 440 }}>
-            <h2>Этикетки напечатались?</h2>
-            <p className="muted">
-              «{askPrinted.name}» — {askPrinted.quantity} шт. Если окно печати закрыли без печати, нажмите «Нет» — в
-              историю ничего не запишется.
-            </p>
-            <div className="row wrap" style={{ justifyContent: 'flex-end' }}>
-              <button className="btn" onClick={() => answerPrinted(false)}>Нет, не печатал</button>
-              <button className="btn primary" onClick={() => answerPrinted(true)}>Да, напечатано</button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {confirm && (
         <div className="modal-bg" onClick={() => setConfirm(null)}>

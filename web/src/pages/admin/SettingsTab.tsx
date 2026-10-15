@@ -81,6 +81,7 @@ export default function SettingsTab() {
       'print.copiesMode': s!['print.copiesMode'],
       'print.scale': s!['print.scale'],
       'print.blankAtEnd': s!['print.blankAtEnd'] !== false,
+      'print.mode': s!['print.mode'] === 'queue' ? 'queue' : 'browser',
       'print.profiles': s!['print.profiles'],
       'label.widthMm': Number(s!['label.widthMm']) || 80,
       'label.heightMm': Number(s!['label.heightMm']) || 50,
@@ -223,6 +224,11 @@ export default function SettingsTab() {
           <input type="checkbox" checked={!!s['printer.dryRun']} onChange={(e) => set('printer.dryRun', e.target.checked)} />
           Тест-режим агента: не печатать, только сохранять PDF
         </label>
+        <label className="fld">Кнопка «ПЕЧАТЬ» на экране печати</label>
+        <select value={s['print.mode'] === 'queue' ? 'queue' : 'browser'} onChange={(e) => set('print.mode', e.target.value)} style={{ maxWidth: 520 }}>
+          <option value="browser">Окно печати браузера (как раньше)</option>
+          <option value="queue">Общая очередь — печатает Print Agent автоматически</option>
+        </select>
         <label className="row" style={{ gap: 8, marginTop: 10, alignItems: 'flex-start' }}>
           <input
             type="checkbox"

@@ -26,6 +26,7 @@ export default function App() {
   const [apiOk, setApiOk] = useState<boolean | null>(null);
   const [theme, setTheme] = useState<'light' | 'dark'>(initTheme);
   const [brand, setBrand] = useState('gofood');
+  const [queueMode, setQueueMode] = useState(false);
   const { info } = useQueue(8000, true);
 
   useEffect(() => {
@@ -35,7 +36,10 @@ export default function App() {
       .catch(() => setApiOk(false));
     api
       .getSettings()
-      .then((r) => setBrand(r.settings?.['brand.preset'] === 'greencity' ? 'greencity' : 'gofood'))
+      .then((r) => {
+        setBrand(r.settings?.['brand.preset'] === 'greencity' ? 'greencity' : 'gofood');
+        setQueueMode(r.settings?.['print.mode'] === 'queue');
+      })
       .catch(() => {});
   }, []);
 
@@ -68,17 +72,21 @@ export default function App() {
         </div>
         <nav className="mainnav">
           <NavLink to="/" end className={nav}>Печать</NavLink>
-          <NavLink to="/queue" className={nav}>
-            Очередь
-            {pending > 0 && <span className="nav-badge">{pending}</span>}
-          </NavLink>
+          {(queueMode || pending > 0) && (
+            <NavLink to="/queue" className={nav}>
+              Очередь
+              {pending > 0 && <span className="nav-badge">{pending}</span>}
+            </NavLink>
+          )}
           <NavLink to="/history" className={nav}>История</NavLink>
           <NavLink to="/admin" className={nav}>Админ</NavLink>
         </nav>
-        <span
-          className={'agent-dot ' + (info ? (info.online ? 'on' : 'off') : '')}
-          title={info ? (info.online ? 'Print Agent на связи' : 'Print Agent не на связи') : ''}
-        />
+        {queueMode && (
+          <span
+            className={'agent-dot ' + (info ? (info.online ? 'on' : 'off') : '')}
+            title={info ? (info.online ? 'Print Agent на связи' : 'Print Agent не на связи') : ''}
+          />
+        )}
         <button
           className="navlink theme-btn"
           title="Светлая / тёмная тема"
