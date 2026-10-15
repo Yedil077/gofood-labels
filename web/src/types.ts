@@ -76,6 +76,25 @@ export interface QueueJob {
   created_at: string;
   queued_at: string;
   finished_at: string | null;
+  /** почему ждёт: 'roll' — нужен другой рулон, 'profile' — профиль не проверен */
+  wait?: 'roll' | 'profile' | null;
+}
+
+/** Состояние очереди Windows по отчёту агента (только чтение). */
+export interface PrinterStatus {
+  name: string;
+  found: boolean;
+  status: string;
+  workOffline: boolean;
+  paper: { name: string; widthMm: number; lengthMm: number } | null;
+  landscape: boolean;
+}
+
+export interface RollInfo {
+  id: string;
+  source: 'default' | 'manual';
+  by: string | null;
+  at: string | null;
 }
 
 export interface QueueInfo {
@@ -83,7 +102,13 @@ export interface QueueInfo {
   pending: number;
   online: boolean;
   printer: string;
+  printerStatus?: PrinterStatus | null;
+  printers?: PrinterStatus[];
   agent: { name: string; printers: string[]; at: string; version?: string } | null;
+  roll?: RollInfo;
+  canPrint?: boolean;
+  blockedReason?: string;
+  profiles?: { id: string; title: string; ready: boolean; enabled: boolean; windowsPrinter: string }[];
 }
 
 export interface LogRow {

@@ -6,7 +6,7 @@ import { renderJob } from './render.js';
 import { buildPdf } from './pdf.js';
 import { printPdf, listPrinters } from './print.js';
 import { runSync } from './sync.js';
-import { watchSpool, defaultPrinter } from './spooler.js';
+import { watchSpool, defaultPrinter, printerInfo } from './spooler.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..');
@@ -52,6 +52,38 @@ function loadConfig() {
 }
 
 const cfg = loadConfig();
+
+// Один агент на компьютер: второй экземпляр (двойной автозапуск, ручной запуск поверх
+// скрытого) сразу выходит. Между разными ПК двойную печать исключает сервер.
+const LOCK = path.join(ROOT, 'out', 'agent.lock');
+try {
+  const fd = fs.openSync(LOCK, 'wx');
+  fs.writeSync(fd, String(process.pid));
+  fs.closeSync(fd);
+} catch {
+  const pid = Number(fs.readFileSync(LOCK, 'utf8')) || 0;
+  let alive = false;
+  try {
+    if (pid && pid !== process.pid) {
+      process.kill(pid, 0);
+      alive = true;
+    }
+  } catch {
+    alive = false;
+  }
+  if (alive) {
+    console.log(`  Агент уже запущен (pid ${pid}) — второй экземпляр не нужен.`);
+    process.exit(0);
+  }
+  fs.writeFileSync(LOCK, String(process.pid)); // старый замок от упавшего процесса
+}
+const dropLock = () => {
+  try {
+    if (Number(fs.readFileSync(LOCK, 'utf8')) === process.pid) fs.rmSync(LOCK);
+  } catch {}
+};
+process.on('exit', dropLock);
+for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => process.exit(0));
 const API = (p) => `${cfg.apiBase}/api${p}`;
 const authHeaders = { 'Content-Type': 'application/json', Authorization: `Bearer ${cfg.agentToken || ''}` };
 
@@ -65,10 +97,22 @@ async function jfetch(url, init) {
 let printersCache = [];
 let lastSyncAt = null;
 let activePrinter = '';
+let statusCache = [];
+let statusAt = 0;
+/** Очереди Windows, которые нужны профилям печати (основная + указанные в профилях). */
+function profilePrinters() {
+  const list = Array.isArray(settingsCache['print.profiles']) ? settingsCache['print.profiles'] : [];
+  return [activePrinter, ...list.map((p) => p && p.windowsPrinter)].filter(Boolean);
+}
 async function sayHello() {
   try {
     printersCache = await listPrinters();
     activePrinter = await resolvePrinter();
+    // состояние принтеров — раз в минуту (PowerShell не дёргаем каждые 15 с)
+    if (Date.now() - statusAt > 60000) {
+      statusCache = await printerInfo(profilePrinters());
+      statusAt = Date.now();
+    }
     await jfetch(API('/agent/hello'), {
       method: 'POST',
       body: JSON.stringify({
@@ -76,7 +120,8 @@ async function sayHello() {
         platform: process.platform,
         printers: printersCache,
         printer: activePrinter,
-        version: '3.0.0',
+        printerStatus: statusCache,
+        version: '3.1.0',
         lastSyncAt,
         iikoConfigured: !!(cfg.iiko && cfg.iiko.host && cfg.iiko.login),
       }),
@@ -121,7 +166,11 @@ async function processQueueJob(job) {
     jfetch(API(`/queue/${job.id}/complete`), { method: 'POST', body: JSON.stringify({ agent: cfg.name, ...r }) }).catch(
       (e) => console.warn('  complete:', e.message)
     );
-  console.log(`→ ${job.dish_name || job.kind} ×${filled}${blank ? ' + 1 пустая' : ''}  [${job.id}]`);
+  const pr = job.profile || {};
+  console.log(
+    `→ ${job.dish_name || job.kind} ×${filled}${blank ? ' + 1 пустая' : ''}  [${pr.code || job.label_size || '?'}` +
+      `${pr.windowsPrinter ? ' → ' + pr.windowsPrinter : ''}]  ${job.id}`
+  );
   const hb = setInterval(() => say('heartbeat').catch(() => {}), 10000);
   try {
     // 1) рендер
@@ -144,14 +193,19 @@ async function processQueueJob(job) {
     }
     if (!ok) return console.warn('  задание больше не наше — пропуск');
 
-    // 3) печать
-    const printer = activePrinter || (await resolvePrinter());
+    // 3) печать — по профилю установленного рулона (приходит с сервера вместе с заданием):
+    //    своя очередь Windows (со своими настройками носителя/Cut) или основной принтер,
+    //    бумага и ориентация — только для этого задания, глобально драйвер не меняется.
+    const prof = job.profile || {};
+    const printer = prof.windowsPrinter || activePrinter || (await resolvePrinter());
     const dryRun = cfg.dryRun || !!p.render?.dryRun;
     const res = await printPdf(pdf, {
       printer: printer || undefined,
       copies: filled,
       copiesMode: 'pages',
       scale: p.render?.scale || 'noscale',
+      paperSize: prof.paperName || undefined,
+      orientation: prof.orientation,
       dryRun,
       tag,
     });

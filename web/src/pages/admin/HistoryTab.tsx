@@ -4,7 +4,7 @@ import type { PrintJob } from '../../types';
 // @ts-ignore
 import { STATUS_TEXT } from '../../shared/printQueue.js';
 // @ts-ignore
-import { labelSizeById } from '../../shared/labelSizes.js';
+import { profileById } from '../../shared/labelSizes.js';
 
 const tagOf: Record<string, string> = {
   success: 'ok',
@@ -23,6 +23,10 @@ const OLD_TEXT: Record<string, string> = { success: 'Завершено', 'dry-r
 
 export default function HistoryTab() {
   const [jobs, setJobs] = useState<PrintJob[]>([]);
+  const [settings, setSettings] = useState<any>(null);
+  useEffect(() => {
+    api.getSettings().then((r) => setSettings(r.settings)).catch(() => {});
+  }, []);
   const [q, setQ] = useState('');
   const load = () => api.history(1000).then((r) => setJobs((r.jobs || []).filter((j) => j.kind !== 'sync')));
   useEffect(() => {
@@ -65,7 +69,7 @@ export default function HistoryTab() {
                   {j.blank ? <span className="muted"> + {j.blank} пуст.</span> : null}
                 </td>
                 <td className="mono">{j.labelDate} {j.labelTime}</td>
-                <td className="muted">{labelSizeById(j.labelSize || '')?.title || '—'}</td>
+                <td className="muted">{profileById(settings, j.labelSize || '')?.title || j.labelSize || '—'}</td>
                 <td>{j.user || '—'}</td>
                 <td className="muted">{j.via === 'browser' ? 'браузер' : j.agent || 'агент'}</td>
                 <td>

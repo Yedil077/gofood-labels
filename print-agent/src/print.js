@@ -46,6 +46,9 @@ export async function printPdf(pdf, opts = {}) {
 
   const o = { scale: opts.scale || 'noscale', silent: true };
   if (opts.printer) o.printer = opts.printer;
+  // для ЭТОГО задания (глобальные настройки драйвера не меняются):
+  if (opts.paperSize) o.paperSize = opts.paperSize; // SumatraPDF paper=<имя размера в драйвере>
+  if (opts.orientation === 'portrait' || opts.orientation === 'landscape') o.orientation = opts.orientation;
   if (opts.copiesMode === 'driver' && opts.copies > 1) o.copies = Number(opts.copies);
 
   const timeoutMs = Number(opts.timeoutMs) || 60000;

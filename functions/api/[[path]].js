@@ -27,7 +27,8 @@ import {
   WARNING_TEXT,
 } from '../../web/src/shared/normalize.js';
 import { detectDietType } from '../../web/src/shared/dietType.js';
-import { labelSizeById } from '../../web/src/shared/labelSizes.js';
+import { profileById, getProfiles, DEFAULT_PROFILE_ID } from '../../web/src/shared/labelSizes.js';
+import { normalizeRoll, readiness, waitReason } from '../../web/src/shared/printerState.js';
 import { printVariantById } from '../../web/src/shared/printVariants.js';
 import { Iiko } from '../../web/src/shared/iiko.js';
 import { buildNomenclatureItems, polishComposition, findNewDishes } from '../../web/src/shared/iikoSync.js';
@@ -241,6 +242,7 @@ async function route(req) {
         const stored = (await getJSON('settings', {})) || {};
         for (const [k, v] of Object.entries(body || {})) {
           if (k === 'datetime') stored.datetime = { ...DEFAULT_DATETIME_CONFIG, ...(stored.datetime || {}), ...v };
+          else if (k === 'print.profiles') stored[k] = getProfiles({ 'print.profiles': Array.isArray(v) ? v : [] });
           else if (SETTINGS_KEYS.includes(k)) stored[k] = v;
         }
         await setJSON('settings', stored);
@@ -544,9 +546,9 @@ async function route(req) {
         label.dietType = body.dietType;
         label.dietTypeLabelFull = body.dietType === 'pp' ? 'Правильное питание' : 'Классическое питание';
       }
-      // размер этикетки, выбранный на экране печати (80×50 / 100×70)
+      // профиль печати (размер), выбранный на экране печати; по умолчанию — основной 80×50
       const render = renderParams(settings);
-      const chosen = labelSizeById(body.labelSize);
+      const chosen = profileById(settings, body.labelSize) || profileById(settings, DEFAULT_PROFILE_ID);
       if (chosen) {
         render.widthMm = chosen.widthMm;
         render.heightMm = chosen.heightMm;
@@ -607,16 +609,39 @@ async function route(req) {
       if (!isAdmin(req)) return denyAdmin();
       const settings = await loadSettings();
       const copies = Math.max(1, Math.min(10, Number(body.copies) || 1));
+      // тестовая этикетка — под установленный рулон
+      const roll = normalizeRoll(await getJSON('printer-roll', null));
+      const prof = profileById(settings, roll.id) || profileById(settings, DEFAULT_PROFILE_ID);
+      const render = { ...renderParams(settings), widthMm: prof.widthMm, heightMm: prof.heightMm };
       const job = await Q.enqueue(getDB(), {
         kind: 'test',
         dishName: '[ТЕСТОВАЯ ПЕЧАТЬ]',
         filled: copies,
         blank: 0,
+        labelSize: prof.id,
         user: body.user || 'admin',
-        payload: { render: renderParams(settings) },
+        payload: { render },
       });
       await logEvent('info', 'print', `Тестовая печать в очереди, ${copies} шт.`);
       return json({ ok: true, jobId: job.id, status: job.status });
+    }
+
+    /* --- установленный рулон: подтверждает оператор вручную (принтер размер не сообщает) --- */
+    if (path === '/printer/roll' && method === 'POST') {
+      const settings = await loadSettings();
+      const prof = profileById(settings, String(body.id || ''));
+      if (!prof) return json({ ok: false, error: 'Нет такого профиля печати' }, 400);
+      const act = await Q.activeJob(getDB());
+      if (act) {
+        return json(
+          { ok: false, error: `Сейчас печатается «${act.dish_name || ''}». Дождитесь окончания, потом меняйте рулон.` },
+          409
+        );
+      }
+      const roll = { id: prof.id, source: 'manual', by: String(body.by || 'кухня').slice(0, 60), at: new Date().toISOString() };
+      await setJSON('printer-roll', roll);
+      await logEvent('info', 'print', `Рулон заменён: ${prof.title} (подтвердил: ${roll.by})`);
+      return json({ ok: true, roll });
     }
 
     /* --- очередь печати (общая для всех компьютеров кухни) --- */
@@ -628,21 +653,50 @@ async function route(req) {
         const info = await getJSON('agent-info', null);
         const online = !!info?.at && Date.now() - new Date(info.at).getTime() < 45000;
         const settings = await loadSettings();
+        const roll = normalizeRoll(await getJSON('printer-roll', null));
         const summary = url.searchParams.get('summary') === '1';
+        const mainPrinter = info?.printer || settings['printer.name'] || '';
+        const printerStatus = (info?.printerStatus || []).find((p) => p.name === mainPrinter) || null;
+        const ready = readiness({ settings, roll, online, printer: printerStatus });
+        const jobs = summary
+          ? undefined
+          : (await Q.listQueue(db)).map(({ payload, ...j }) => ({ ...j, wait: waitReason(j, { settings, roll }) }));
         return json({
-          jobs: summary ? undefined : (await Q.listQueue(db)).map(({ payload, ...j }) => j),
+          jobs,
           pending: await Q.pendingCount(db),
           agent: info ? { name: info.agent, printers: info.printers || [], at: info.at, version: info.version } : null,
           online,
-          printer: settings['printer.name'] || info?.printer || '',
+          printer: mainPrinter,
+          printerStatus,
+          printers: info?.printerStatus || [], // все очереди Windows, которые проверяет агент (состояние + бумага драйвера)
+          roll,
+          canPrint: ready.canPrint,
+          blockedReason: ready.reason,
+          profiles: getProfiles(settings).map((p) => ({ id: p.id, title: p.title, ready: p.ready, enabled: p.enabled, windowsPrinter: p.windowsPrinter })),
         });
       }
       if (seg[1] === 'clear' && method === 'POST') return json({ ok: true, hidden: await Q.hideFinished(db) });
 
-      // для Print Agent
+      // для Print Agent: берём только задания под установленный рулон и только если профиль проверен
       if (seg[1] === 'claim' && method === 'POST') {
         if (!isAgent(req)) return denyAgent();
-        return json(await Q.claimNext(db, String(body.agent || 'agent')));
+        const settings = await loadSettings();
+        const roll = normalizeRoll(await getJSON('printer-roll', null));
+        const prof = profileById(settings, roll.id);
+        if (!prof || !prof.ready) return json({ empty: true, blocked: 'profile', roll });
+        const r = await Q.claimNext(db, String(body.agent || 'agent'), Date.now(), { labelSize: roll.id });
+        if (r.job) {
+          r.job.profile = {
+            id: prof.id,
+            code: prof.code,
+            widthMm: prof.widthMm,
+            heightMm: prof.heightMm,
+            windowsPrinter: prof.windowsPrinter,
+            paperName: prof.paperName,
+            orientation: prof.orientation,
+          };
+        }
+        return json(r);
       }
       if (seg[1] === 'recover' && method === 'POST') {
         if (!isAgent(req)) return denyAgent();
@@ -831,6 +885,8 @@ async function route(req) {
           platform: body.platform || null,
           printers: Array.isArray(body.printers) ? body.printers : [],
           printer: body.printer || null, // принтер, на который агент реально печатает
+          // по каждой проверяемой очереди Windows: состояние + бумага/ориентация, сохранённые в драйвере
+          printerStatus: Array.isArray(body.printerStatus) ? body.printerStatus.slice(0, 20) : [],
           version: body.version || null,
           at: new Date().toISOString(),
         });

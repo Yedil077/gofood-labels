@@ -10,7 +10,7 @@ import { api } from '../api';
 import { useQueue } from '../useQueue';
 import { getLabelSizeId, setLabelSizeId, getPrintVariantId, setPrintVariantId } from '../config';
 // @ts-ignore
-import { LABEL_SIZES, labelSizeById, labelSizeFor } from '../shared/labelSizes.js';
+import { getProfiles, profileById, labelSizeFor } from '../shared/labelSizes.js';
 // @ts-ignore
 import { PRINT_VARIANTS, printVariantById } from '../shared/printVariants.js';
 // @ts-ignore
@@ -120,8 +120,8 @@ export default function PrintPage() {
   const dt = useMemo(() => (dtCfg ? calculateLabelDateTime(localKey(now), dtCfg) : null), [dtCfg, now]);
 
   const size =
-    labelSizeById(sizeId) ||
-    labelSizeFor(Number(settings?.['label.widthMm']) || 80, Number(settings?.['label.heightMm']) || 50);
+    profileById(settings, sizeId) ||
+    labelSizeFor(Number(settings?.['label.widthMm']) || 80, Number(settings?.['label.heightMm']) || 50, settings);
   function chooseSize(id: string) {
     setSizeId(id);
     setLabelSizeId(id);
@@ -367,7 +367,7 @@ export default function PrintPage() {
 
             <label className="fld">Размер этикетки</label>
             <div className="chips">
-              {LABEL_SIZES.map((s: any) => (
+              {getProfiles(settings).filter((p: any) => p.enabled || p.id === size.id).map((s: any) => (
                 <button key={s.id} className={'chip' + (size.id === s.id ? ' active' : '')} onClick={() => chooseSize(s.id)}>
                   {s.title}
                 </button>
@@ -415,6 +415,34 @@ export default function PrintPage() {
                 </div>
               </>
             )}
+
+            {(() => {
+              // совпадает ли выбранный размер с рулоном в Epson и можно ли печатать сразу
+              const roll = queue?.roll;
+              if (!roll || !online) return null;
+              const rollTitle = profileById(settings, roll.id)?.title || roll.id;
+              if (roll.id !== size.id)
+                return (
+                  <div className="banner warn" style={{ marginTop: 16 }}>
+                    <b>В Epson сейчас рулон {rollTitle}.</b> Задание {size.title} встанет в очередь и будет ждать, пока
+                    не заменят рулон и не отметят это на странице «Очередь».
+                  </div>
+                );
+              if (!size.ready)
+                return (
+                  <div className="banner warn" style={{ marginTop: 16 }}>
+                    Профиль «{size.title}» не проверен на рулоне — автопечать выключена. Задание будет ждать; можно
+                    напечатать «Через браузер».
+                  </div>
+                );
+              if (queue?.canPrint === false)
+                return <div className="banner warn" style={{ marginTop: 16 }}>Печать сейчас не пойдёт: {queue.blockedReason}</div>;
+              return (
+                <div className="banner ok" style={{ marginTop: 16 }}>
+                  Рулон {rollTitle} установлен — печать начнётся сразу{queue?.pending ? ` после ${queue.pending} зад. в очереди` : ''}.
+                </div>
+              );
+            })()}
 
             <div className="actions">
               {online ? (
@@ -500,7 +528,7 @@ export default function PrintPage() {
                       </td>
                       <td><b>{j.quantity}</b></td>
                       <td className="mono">{j.labelDate} {j.labelTime}</td>
-                      <td className="muted">{labelSizeById(j.labelSize || '')?.title || '—'}</td>
+                      <td className="muted">{profileById(settings, j.labelSize || '')?.title || '—'}</td>
                       <td className="muted small">{STATUS_TEXT[j.status] || j.status}</td>
                       <td className="right">
                         {d && (

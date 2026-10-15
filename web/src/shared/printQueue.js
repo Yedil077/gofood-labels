@@ -184,24 +184,32 @@ export async function recoverAgent(db, agent, now = Date.now()) {
   return { requeued: changes(a), uncertain: changes(b) };
 }
 
+/** Размер задания (старые записи без размера — основной формат 80×50). */
+export const DEFAULT_SIZE = '80x50';
+
 /**
  * Атомарно взять следующее задание. Возвращает { job } | { busy: job } | { empty: true }.
  * Один оператор UPDATE…RETURNING: берёт самое старое queued только если нет задания в работе.
+ * opts.labelSize — брать только задания под установленный рулон (FIFO внутри этого размера);
+ * задания других размеров остаются в очереди и ждут замены рулона.
  */
-export async function claimNext(db, agent, now = Date.now()) {
+export async function claimNext(db, agent, now = Date.now(), opts = {}) {
   await ensureQueueSchema(db);
   await recoverStale(db, now);
   const t = iso(now);
+  const size = opts.labelSize ? String(opts.labelSize) : null;
   const row = await db
     .prepare(
-      `UPDATE print_jobs SET status='sending', agent=?, claimed_at=?, heartbeat_at=?,
+      `UPDATE print_jobs SET status='sending', agent=?1, claimed_at=?2, heartbeat_at=?2,
          attempts=attempts+1, error=NULL
-       WHERE id = (SELECT id FROM print_jobs WHERE status='queued' ORDER BY queued_at, id LIMIT 1)
+       WHERE id = (SELECT id FROM print_jobs
+                   WHERE status='queued' AND (?3 IS NULL OR COALESCE(label_size, '${DEFAULT_SIZE}') = ?3)
+                   ORDER BY queued_at, id LIMIT 1)
          AND status='queued'
          AND NOT EXISTS (SELECT 1 FROM print_jobs WHERE status IN ('sending','printing'))
        RETURNING *`
     )
-    .bind(agent, t, t)
+    .bind(agent, t, size)
     .first();
   if (row) return { job: rowOut(row) };
   const busy = await db
@@ -306,6 +314,14 @@ export async function listQueue(db, now = Date.now()) {
     .bind(since)
     .all();
   return (results || []).map(rowOut);
+}
+
+/** Задание, которое сейчас в работе у агента (или null). */
+export async function activeJob(db) {
+  await ensureQueueSchema(db);
+  return rowOut(
+    await db.prepare(`SELECT * FROM print_jobs WHERE status IN ('sending','printing') ORDER BY claimed_at LIMIT 1`).first()
+  );
 }
 
 export async function pendingCount(db) {

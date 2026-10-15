@@ -96,6 +96,9 @@ export const api = {
   queueCancel: (id: string) => req<{ ok: boolean; error?: string }>(`/queue/${id}/cancel`, { method: 'POST', body: '{}' }),
   queueRetry: (id: string) => req<{ ok: boolean; error?: string }>(`/queue/${id}/retry`, { method: 'POST', body: '{}' }),
   queueClear: () => req<{ ok: boolean; hidden: number }>('/queue/clear', { method: 'POST', body: '{}' }),
+  /** Оператор подтвердил, какой рулон установлен в Epson. */
+  setRoll: (id: string, by: string) =>
+    req<{ ok: boolean; error?: string }>('/printer/roll', { method: 'POST', body: JSON.stringify({ id, by }) }),
   /** Записать печать через браузер в историю. */
   logPrint: (body: {
     dishId: number;

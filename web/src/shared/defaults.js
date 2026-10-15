@@ -1,4 +1,5 @@
 import { DEFAULT_DATETIME_CONFIG } from './labelDateTime.js';
+import { DEFAULT_PROFILES } from './labelSizes.js';
 
 /** Значения настроек по умолчанию (сливаются с сохранёнными в хранилище). */
 export const DEFAULTS = {
@@ -10,6 +11,9 @@ export const DEFAULTS = {
   'print.defaultCopies': 1,
   // Пустая этикетка в конце тиража (для Cut Epson): при 4+ заполненных добавляется 1 пустая.
   'print.blankAtEnd': true,
+  // Профили печати (размер на сайте + очередь Windows / бумага / ориентация для агента).
+  // Редактирует администратор; см. web/src/shared/labelSizes.js.
+  'print.profiles': DEFAULT_PROFILES,
 
   // Геометрия этикетки (физический носитель — 80×50 мм, альбомный: ширина 80, высота 50).
   // Носитель ≥ 95×65 (старый 100×70) автоматически рисуется классическим макетом.

@@ -2,10 +2,9 @@ import { useState } from 'react';
 import { api } from '../api';
 import { useQueue } from '../useQueue';
 import AgentStatus from '../components/AgentStatus';
+import RollControl from '../components/RollControl';
 // @ts-ignore
 import { STATUS_TEXT } from '../shared/printQueue.js';
-// @ts-ignore
-import { labelSizeById } from '../shared/labelSizes.js';
 import type { QueueJob } from '../types';
 
 const TONE: Record<string, string> = {
@@ -35,7 +34,15 @@ export default function QueuePage() {
   const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
   const [me, setMe] = useState(getKitchenUser);
   const jobs = info?.jobs || [];
-  const active = jobs.filter((j) => ['queued', 'sending', 'printing'].includes(j.status));
+  const sizeTitle = (id?: string | null) => info?.profiles?.find((p) => p.id === (id || '80x50'))?.title || id || '—';
+  // печатается / ждёт установленный рулон — по порядку; другой размер — отдельно, ждёт замены рулона
+  const active = jobs.filter((j) => ['sending', 'printing'].includes(j.status) || (j.status === 'queued' && j.wait !== 'roll'));
+  const otherRoll = jobs.filter((j) => j.status === 'queued' && j.wait === 'roll');
+  const bySize = otherRoll.reduce<Record<string, QueueJob[]>>((m, j) => {
+    const k = j.label_size || '80x50';
+    (m[k] ||= []).push(j);
+    return m;
+  }, {});
   const problems = jobs.filter((j) => ['error', 'uncertain'].includes(j.status));
   const finished = jobs.filter((j) => ['done', 'sent', 'cancelled'].includes(j.status));
 
@@ -55,9 +62,12 @@ export default function QueuePage() {
         </div>
         <div className="qrow-meta">
           {time(j.created_at)} · {j.user || 'кухня'}
-          {j.label_size ? ` · ${labelSizeById(j.label_size)?.title || j.label_size}` : ''}
+          {` · ${sizeTitle(j.label_size)}`}
           {j.variant === 'aidar' ? ' · Айдар' : ''}
         </div>
+        {j.wait === 'profile' && (
+          <div className="qrow-note err">Профиль «{sizeTitle(j.label_size)}» не проверен — автопечать выключена (Админ → Профили печати)</div>
+        )}
         {(j.error || j.note) && (
           <div className={'qrow-note' + (j.error ? ' err' : '')}>{j.error || j.note}</div>
         )}
@@ -113,6 +123,30 @@ export default function QueuePage() {
         </div>
       )}
       {msg && <div className={'banner ' + msg.kind}>{msg.text}</div>}
+
+      <div className="card">
+        <RollControl info={info} onChanged={reload} suggest={Object.keys(bySize)[0]} />
+      </div>
+
+      {otherRoll.length > 0 && (
+        <div className="card wait-roll">
+          <h2>Ждут другого рулона <span className="count-pill">{otherRoll.length}</span></h2>
+          <p className="muted small">
+            На текущем рулоне они не печатаются. Замените рулон и отметьте его выше — задания пойдут по порядку.
+          </p>
+          {Object.entries(bySize).map(([size, list]) => (
+            <div key={size} style={{ marginTop: 10 }}>
+              <div className="row" style={{ justifyContent: 'space-between' }}>
+                <b>{sizeTitle(size)}</b>
+                <span className="muted small">
+                  {list.length} зад., {list.reduce((a, j) => a + j.filled + (j.blank || 0), 0)} этикеток
+                </span>
+              </div>
+              <div className="qlist">{list.map((j) => row(j))}</div>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className="card">
         <div className="row wrap" style={{ justifyContent: 'space-between' }}>

@@ -4,7 +4,7 @@ import { api } from '../../api';
 import { renderLabel } from '../../label/renderBrowser';
 import { getLabelSizeId } from '../../config';
 // @ts-ignore
-import { labelSizeById, labelSizeFor } from '../../shared/labelSizes.js';
+import { profileById, labelSizeFor } from '../../shared/labelSizes.js';
 // @ts-ignore
 import { calculateLabelDateTime, localKey } from '../../shared/labelDateTime.js';
 // @ts-ignore
@@ -275,8 +275,8 @@ function EditModal({
 }) {
   // превью в том же размере, что выбран на экране печати
   const prevSize =
-    labelSizeById(getLabelSizeId()) ||
-    labelSizeFor(Number(settings['label.widthMm']) || 80, Number(settings['label.heightMm']) || 50);
+    profileById(settings, getLabelSizeId()) ||
+    labelSizeFor(Number(settings['label.widthMm']) || 80, Number(settings['label.heightMm']) || 50, settings);
   const [f, setF] = useState({
     name: dish.name,
     category: dish.category || '',

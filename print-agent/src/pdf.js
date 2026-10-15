@@ -20,9 +20,12 @@ export function buildPdf(pngBuffer, { widthMm, heightMm, copies = 1, copiesMode 
       doc.on('data', (c) => chunks.push(c));
       doc.on('end', () => resolve(Buffer.concat(chunks)));
       doc.on('error', reject);
+      // картинка этикетки встраивается в PDF ОДИН раз, страницы на неё ссылаются:
+      // 100 этикеток ≈ размер одной, а не ×100 (быстрее спулер и меньше памяти)
+      const img = doc.openImage(pngBuffer);
       for (let i = 0; i < n; i++) {
         doc.addPage({ size: [wPt, hPt], margin: 0 });
-        doc.image(pngBuffer, 0, 0, { width: wPt, height: hPt });
+        doc.image(img, 0, 0, { width: wPt, height: hPt });
       }
       for (let i = 0; i < b; i++) {
         doc.addPage({ size: [wPt, hPt], margin: 0 });

@@ -133,6 +133,27 @@ test('отмена — только ожидающих; очистка скры�
   assert.equal((await listQueue(db, T0 + 5)).length, 0);
 });
 
+test('рулон: берутся только задания под установленный рулон, по порядку; остальные ждут', async () => {
+  const db = d1();
+  const a = await enqueue(db, { ...job('Салат 80×50', 20), labelSize: '80x50' }, T0);
+  const b = await enqueue(db, { ...job('Суп круг 60', 50), labelSize: 'r60' }, T0 + 1);
+  const c = await enqueue(db, { ...job('Сырники 80×50', 10), labelSize: '80x50' }, T0 + 2);
+  const old = await enqueue(db, job('Старая запись без размера'), T0 + 3); // считается 80×50
+
+  const r1 = await claimNext(db, 'agent', T0 + 10, { labelSize: '80x50' });
+  assert.equal(r1.job.id, a.id);
+  await complete(db, a.id, 'agent', { result: 'done' }, T0 + 11);
+  const r2 = await claimNext(db, 'agent', T0 + 12, { labelSize: '80x50' });
+  assert.equal(r2.job.id, c.id, 'суп на круг 60 пропущен — ждёт свой рулон');
+  await complete(db, c.id, 'agent', { result: 'done' }, T0 + 13);
+  assert.equal((await claimNext(db, 'agent', T0 + 14, { labelSize: '80x50' })).job.id, old.id);
+  await complete(db, old.id, 'agent', { result: 'done' }, T0 + 15);
+  assert.ok((await claimNext(db, 'agent', T0 + 16, { labelSize: '80x50' })).empty, 'суп не печатается на 80×50');
+  assert.equal((await getJob(db, b.id)).status, 'queued');
+  // поставили рулон круг 60 — суп пошёл
+  assert.equal((await claimNext(db, 'agent', T0 + 17, { labelSize: 'r60' })).job.id, b.id);
+});
+
 test('запись о печати через браузер не попадает в очередь', async () => {
   const db = d1();
   await enqueue(db, { ...job('A'), status: 'browser' }, T0);

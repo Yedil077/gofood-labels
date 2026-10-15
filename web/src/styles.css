@@ -969,6 +969,55 @@ h1 {
   .qrow-actions { grid-area: actions; }
 }
 
+/* рулон и профили печати */
+.roll-control {
+  display: grid;
+  grid-template-columns: minmax(180px, 240px) minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+.roll-title {
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+.roll-change .chips {
+  margin-top: 6px;
+}
+.chip.suggest {
+  border-color: var(--warn);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--warn) 18%, transparent);
+}
+.wait-roll {
+  border-color: color-mix(in srgb, var(--warn) 45%, var(--line));
+}
+.profiles {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.profile-card {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px 14px;
+}
+.profile-card.ready {
+  border-color: color-mix(in srgb, var(--ok) 40%, var(--line));
+}
+.profile-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 4px 12px;
+}
+.profile-grid input[type='number'] {
+  min-width: 0;
+}
+@media (max-width: 640px) {
+  .roll-control {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* всплывающее подтверждение */
 .toast {
   position: fixed;

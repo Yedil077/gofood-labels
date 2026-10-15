@@ -3,6 +3,7 @@ import { api } from '../../api';
 import { renderTest } from '../../label/renderBrowser';
 import { getToken, setToken } from '../../config';
 import type { Settings } from '../../types';
+import ProfilesEditor from '../../components/ProfilesEditor';
 
 const minToHHMM = (m: number) =>
   `${String(Math.floor((m || 0) / 60)).padStart(2, '0')}:${String((m || 0) % 60).padStart(2, '0')}`;
@@ -80,6 +81,7 @@ export default function SettingsTab() {
       'print.copiesMode': s!['print.copiesMode'],
       'print.scale': s!['print.scale'],
       'print.blankAtEnd': s!['print.blankAtEnd'] !== false,
+      'print.profiles': s!['print.profiles'],
       'label.widthMm': Number(s!['label.widthMm']) || 80,
       'label.heightMm': Number(s!['label.heightMm']) || 50,
       'label.dpi': Number(s!['label.dpi']) || 300,
@@ -233,6 +235,19 @@ export default function SettingsTab() {
             последней страницей того же задания. На экране печати не показывается — количество остаётся «чистым».
           </span>
         </label>
+      </div>
+
+      {/* --- Профили печати --- */}
+      <div className="card" style={{ marginTop: 18 }}>
+        <h2>Профили печати (размеры и форматы)</h2>
+        <p className="muted">
+          Один Epson — разные рулоны. Каждый формат печатается через свою очередь Windows с сохранёнными в ней
+          настройками носителя (Width/Length, Gap, Media Form, Cut): SumatraPDF может выбрать для задания очередь,
+          бумагу по имени и ориентацию, но <b>не</b> тип носителя, зазор и Cut. Сайт настройки драйвера не меняет.
+          «Проверен, автопечать» включайте только после пробной печати на реальном рулоне. Новый формат
+          добавляется здесь — Print Agent переписывать не нужно (макет этикетки выбирается по размеру).
+        </p>
+        <ProfilesEditor value={s['print.profiles']} onChange={(v) => set('print.profiles', v)} />
       </div>
 
       {/* --- Размер --- */}
