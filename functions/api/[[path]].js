@@ -658,6 +658,10 @@ async function route(req) {
         const mainPrinter = info?.printer || settings['printer.name'] || '';
         const printerStatus = (info?.printerStatus || []).find((p) => p.name === mainPrinter) || null;
         const ready = readiness({ settings, roll, online, printer: printerStatus });
+        if (online && ready.canPrint && !mainPrinter) {
+          ready.canPrint = false;
+          ready.reason = 'Не выбран принтер для этикеток (Админ → Настройки → Принтер)';
+        }
         const jobs = summary
           ? undefined
           : (await Q.listQueue(db)).map(({ payload, ...j }) => ({ ...j, wait: waitReason(j, { settings, roll }) }));

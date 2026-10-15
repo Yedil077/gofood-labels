@@ -1,12 +1,13 @@
-' Скрытый запуск Print Agent с автоперезапуском: если агент упал или потерял сеть
-' и завершился — через 10 секунд он запускается снова. Второй экземпляр агент
-' не запустит сам (замок out\agent.lock), так что двойной старт безопасен.
+' Hidden start of GOFOOD Print Agent with auto-restart:
+' if the agent crashes or exits, it is started again after 10 seconds.
+' Exit code 3 = another agent is already running on this PC -> stop this loop.
 Set fso = CreateObject("Scripting.FileSystemObject")
 Set sh = CreateObject("WScript.Shell")
 dir = fso.GetParentFolderName(WScript.ScriptFullName)
 sh.CurrentDirectory = dir
 If Not fso.FolderExists(dir & "\out") Then fso.CreateFolder(dir & "\out")
 Do
-  sh.Run "cmd /c node src\index.js >> out\agent-console.log 2>&1", 0, True
+  rc = sh.Run("cmd /c node src\index.js >> out\agent-console.log 2>&1", 0, True)
+  If rc = 3 Then WScript.Quit
   WScript.Sleep 10000
 Loop

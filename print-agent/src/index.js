@@ -73,7 +73,7 @@ try {
   }
   if (alive) {
     console.log(`  Агент уже запущен (pid ${pid}) — второй экземпляр не нужен.`);
-    process.exit(0);
+    process.exit(3); // код 3: run-hidden.vbs по нему прекращает свой цикл перезапуска
   }
   fs.writeFileSync(LOCK, String(process.pid)); // старый замок от упавшего процесса
 }
@@ -142,10 +142,16 @@ async function getSettings() {
 /* ------------------------- очередь печати (v3) ------------------------- */
 
 let settingsCache = {};
+/**
+ * Принтер для этикеток — ТОЛЬКО явно выбранный (agent-config.json printerName или сайт:
+ * Админ → Настройки → Принтер). Принтер по умолчанию Windows НЕ используем: Windows сама
+ * меняет его на «последний использованный», и этикетки ушли бы на обычный A4-принтер.
+ */
 async function resolvePrinter() {
   settingsCache = await getSettings();
-  return cfg.printerName || settingsCache['printer.name'] || (await defaultPrinter()) || '';
+  return cfg.printerName || settingsCache['printer.name'] || '';
 }
+let warnedNoPrinter = false;
 
 /**
  * Одно задание из общей очереди. Порядок важен:
@@ -197,7 +203,7 @@ async function processQueueJob(job) {
     //    своя очередь Windows (со своими настройками носителя/Cut) или основной принтер,
     //    бумага и ориентация — только для этого задания, глобально драйвер не меняется.
     const prof = job.profile || {};
-    const printer = prof.windowsPrinter || activePrinter || (await resolvePrinter());
+    const printer = prof.windowsPrinter || activePrinter;
     const dryRun = cfg.dryRun || !!p.render?.dryRun;
     const res = await printPdf(pdf, {
       printer: printer || undefined,
@@ -237,6 +243,14 @@ async function queueTick() {
   if (queueBusy) return;
   queueBusy = true;
   try {
+    // без явно выбранного принтера задания не берём — они спокойно ждут в очереди
+    activePrinter = await resolvePrinter();
+    if (!activePrinter) {
+      if (!warnedNoPrinter) console.warn('  Не выбран принтер для этикеток (Админ → Настройки → Принтер) — задания не беру.');
+      warnedNoPrinter = true;
+      return;
+    }
+    warnedNoPrinter = false;
     const r = await jfetch(API('/queue/claim'), { method: 'POST', body: JSON.stringify({ agent: cfg.name }) });
     if (r.job) await processQueueJob(r.job);
   } catch (e) {
@@ -363,7 +377,7 @@ async function syncScheduler() {
 
 console.log(`\n  GOFOOD Print Agent  ·  ${cfg.name}`);
 console.log(`  API:      ${cfg.apiBase}`);
-console.log(`  Принтер:  ${cfg.printerName || '(из настроек сайта / по умолчанию)'}`);
+console.log(`  Принтер:  ${cfg.printerName || '(из настроек сайта; принтер по умолчанию Windows не используется)'}`);
 console.log(`  iiko:     ${cfg.iiko && cfg.iiko.host ? cfg.iiko.host : 'не настроен'}`);
 console.log(`  Опрос:    каждые ${cfg.pollMs} мс${cfg.dryRun ? '  ·  ТЕСТ-РЕЖИМ (без печати)' : ''}\n`);
 
@@ -379,6 +393,11 @@ setInterval(sayHello, cfg.helloMs);
 setInterval(queueTick, cfg.pollMs);
 setInterval(tick, Math.max(cfg.pollMs, 5000));
 queueTick();
-setInterval(syncScheduler, 60 * 1000); // раз в минуту проверяем, не пора ли синхронизировать
 tick();
-setTimeout(syncScheduler, 8000); // первая синхронизация через 8 c после старта
+// Синхронизация с iiko теперь только облачная (Cloudflare сам ходит в iiko и чистит составы).
+// Собственный синк агента выключен: он перезаписывал очищенные составы старой версией.
+// Включить обратно можно явно: "agentSync": true в agent-config.json.
+if (cfg.agentSync === true) {
+  setInterval(syncScheduler, 60 * 1000);
+  setTimeout(syncScheduler, 8000);
+}
