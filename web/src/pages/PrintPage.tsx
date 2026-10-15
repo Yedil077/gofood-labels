@@ -274,10 +274,10 @@ export default function PrintPage() {
       .then(loadHistory)
       .catch(() => {});
   }
-  async function voidEntry(id: string | number, name?: string) {
-    if (!window.confirm(`Отметить «${name || ''}» как НЕ напечатанное? Запись перестанет считаться в «уже печатали».`)) return;
-    const r: any = await api.queueVoid(String(id));
-    setToast(r?.ok ? { kind: 'ok', text: 'Отмечено: не печаталось' } : { kind: 'err', text: r?.error || 'Не получилось' });
+  async function deleteEntry(id: string | number, name?: string) {
+    if (!window.confirm(`Удалить запись «${name || ''}» из истории печати?`)) return;
+    const r: any = await api.historyDelete(id);
+    setToast(r?.ok ? { kind: 'ok', text: 'Запись удалена' } : { kind: 'err', text: r?.error || 'Не получилось' });
     loadHistory();
   }
 
@@ -557,9 +557,9 @@ export default function PrintPage() {
                             Открыть
                           </button>
                         )}
-                        {j.status === 'browser' && (
-                          <button className="btn small" style={{ marginLeft: 6 }} onClick={() => voidEntry(j.id, j.dish?.name)}>
-                            Не печаталось
+                        {!['queued', 'sending', 'printing'].includes(j.status) && (
+                          <button className="btn small danger" style={{ marginLeft: 6 }} onClick={() => deleteEntry(j.id, j.dish?.name)}>
+                            Удалить
                           </button>
                         )}
                       </td>

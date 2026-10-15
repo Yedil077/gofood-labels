@@ -76,17 +76,18 @@ export default function HistoryTab() {
                   <span className={'tag ' + (tagOf[j.status] || 'muted')}>
                     {STATUS_TEXT[j.status] || OLD_TEXT[j.status] || j.status}
                   </span>
-                  {j.status === 'browser' && (
+                  {!['queued', 'sending', 'printing'].includes(j.status) && (
                     <button
-                      className="btn small"
+                      className="btn small danger"
                       style={{ marginLeft: 6 }}
                       onClick={async () => {
-                        if (!window.confirm(`Отметить «${j.dish?.name || ''}» как НЕ напечатанное?`)) return;
-                        await api.queueVoid(String(j.id));
+                        if (!window.confirm(`Удалить запись «${j.dish?.name || ''}» из истории печати?`)) return;
+                        const r: any = await api.historyDelete(j.id);
+                        if (!r?.ok) alert(r?.error || 'Не получилось');
                         load();
                       }}
                     >
-                      Не печаталось
+                      Удалить
                     </button>
                   )}
                   {j.error && <div className="muted" style={{ fontSize: 11 }}>{j.error}</div>}

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import {
   enqueue, claimNext, progress, complete, cancel, retry, hideFinished, listQueue,
-  recoverStale, recoverAgent, pendingCount, getJob, voidBrowser, STALE_MS, MAX_AUTO_ATTEMPTS,
+  recoverStale, recoverAgent, pendingCount, getJob, voidBrowser, removeFinished, STALE_MS, MAX_AUTO_ATTEMPTS,
 } from '../printQueue.js';
 
 /** Минимальный адаптер node:sqlite → API Cloudflare D1. */
@@ -159,6 +159,21 @@ test('запись о печати через браузер не попадае
   await enqueue(db, { ...job('A'), status: 'browser' }, T0);
   assert.ok((await claimNext(db, 'agent', T0 + 1)).empty);
   assert.equal(await pendingCount(db), 0);
+});
+
+test('удаление из истории: завершённые можно, ожидающие и печатающиеся — нет', async () => {
+  const db = d1();
+  const b = await enqueue(db, { ...job('Каша', 39), status: 'browser' }, T0);
+  const a = await enqueue(db, job('Суп'), T0 + 1);
+  const c = await enqueue(db, job('Салат'), T0 + 2);
+  assert.equal(await removeFinished(db, b.id), true);
+  assert.equal(await getJob(db, b.id), null);
+  assert.equal(await removeFinished(db, a.id), false, 'в очереди — не удаляется');
+  await claimNext(db, 'agent', T0 + 3);
+  assert.equal(await removeFinished(db, a.id), false, 'печатается — не удаляется');
+  await complete(db, a.id, 'agent', { result: 'done' }, T0 + 4);
+  assert.equal(await removeFinished(db, a.id), true);
+  assert.equal((await getJob(db, c.id)).status, 'queued');
 });
 
 test('«не печаталось»: отменяется только запись «через браузер»', async () => {

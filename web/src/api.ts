@@ -94,6 +94,9 @@ export const api = {
   /** Общая очередь печати. summary=true — только счётчик и статус агента. */
   queue: (summary = false) => req<QueueInfo>(`/queue${summary ? '?summary=1' : ''}`),
   queueCancel: (id: string) => req<{ ok: boolean; error?: string }>(`/queue/${id}/cancel`, { method: 'POST', body: '{}' }),
+  /** Удалить запись из истории печати (только завершённые). */
+  historyDelete: (id: string | number) =>
+    req<{ ok: boolean; error?: string }>(`/queue/${id}`, { method: 'DELETE' }),
   /** Запись «Через браузер» на деле не печаталась — отменить. */
   queueVoid: (id: string) => req<{ ok: boolean; error?: string }>(`/queue/${id}/void`, { method: 'POST', body: '{}' }),
   queueRetry: (id: string) => req<{ ok: boolean; error?: string }>(`/queue/${id}/retry`, { method: 'POST', body: '{}' }),

@@ -716,6 +716,22 @@ async function route(req) {
           ? json({ ok: true })
           : json({ ok: false, error: 'Отменить можно только задание «В очереди» — это уже передано принтеру.' }, 409);
       }
+      // удалить запись из истории (кнопка «Удалить»); ждущее/печатающееся — нельзя
+      if (seg.length === 2 && method === 'DELETE') {
+        let ok = await Q.removeFinished(db, id);
+        if (!ok && /^\d+$/.test(id)) {
+          // старая запись истории (job/<id>)
+          const old = await getJob(Number(id));
+          if (old && !['queued', 'printing'].includes(old.status)) {
+            await deleteJob(Number(id));
+            ok = true;
+          }
+        }
+        if (ok) await logEvent('info', 'print', `Запись удалена из истории печати (${id})`);
+        return ok
+          ? json({ ok: true })
+          : json({ ok: false, error: 'Удалить можно только завершённую запись. Ждущее задание — «Отменить» в очереди.' }, 409);
+      }
       if (seg[2] === 'void' && method === 'POST') {
         const ok = await Q.voidBrowser(db, id);
         if (ok) await logEvent('info', 'print', `Запись «через браузер» отмечена как не напечатанная (${id})`);

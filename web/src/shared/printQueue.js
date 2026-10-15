@@ -287,6 +287,19 @@ export async function voidBrowser(db, id, now = Date.now()) {
   return changes(r) === 1;
 }
 
+/**
+ * Удалить запись из истории. Только завершённые / отменённые / «через браузер» / ошибки —
+ * то, что ждёт или печатается, удалить нельзя (для очереди есть «Отменить»).
+ */
+export async function removeFinished(db, id) {
+  await ensureQueueSchema(db);
+  const r = await db
+    .prepare(`DELETE FROM print_jobs WHERE id=? AND status NOT IN ('queued','sending','printing')`)
+    .bind(id)
+    .run();
+  return changes(r) === 1;
+}
+
 /** Ручной повтор: ошибка / неизвестно / отменено → в конец очереди. */
 export async function retry(db, id, now = Date.now()) {
   await ensureQueueSchema(db);
